@@ -1,0 +1,9 @@
+data/raw/
+data/sample/generated/
+.env
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+data/db/
+.pytest_cache/

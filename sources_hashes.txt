@@ -1,0 +1,2 @@
+a19bddbe9cfd136de02fbd266335034a31d507efe790dfec0241be9aa0b0a5a0  data/raw/tcs_annual_report_FY26.pdf
+2cb4d08de3aa23cc72a8f8aacceffb9667039c719f5b84278948b72ea1868ca2  data/raw/tcs_factsheet_Q1_FY27.pdf

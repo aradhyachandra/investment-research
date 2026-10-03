@@ -1,0 +1,67 @@
+# Metric definitions -> seeded into the `metric` table.
+# Only the 5 metrics used by data/sample/facts_sample.csv are defined so far.
+# The full v1 list (PROJECT_PLAN.md Section 4.2) is added when the full dataset exists.
+#
+# Fields:
+#   statement      income | balance_sheet | cash_flow | other
+#   unit_kind      currency | per_share | shares | percent | count | days
+#   canonical_unit INR_CRORE | INR_PER_SHARE | SHARES_CRORE | PERCENT | COUNT | DAYS
+#   is_flow        1 = measured over a period, 0 = point in time (balance sheet date)
+#   definition     exactly what the line includes / excludes
+
+metrics:
+  revenue_from_operations:
+    display_name: Revenue from operations
+    statement: income
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    definition: >-
+      "Revenue from operations" as reported on the face of the Statement of Profit
+      and Loss (Ind AS). Excludes "Other income", which is a separate line.
+
+  profit_after_tax:
+    display_name: Profit after tax (profit for the year)
+    statement: income
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    definition: >-
+      "Profit for the year" as reported on the Statement of Profit and Loss, i.e.
+      after tax and INCLUDING the share attributable to non-controlling interests.
+      The sample fixture uses this line. It is NOT "Profit attributable to
+      shareholders of the Company", which is a different, smaller figure.
+
+  eps_basic:
+    display_name: Basic EPS
+    statement: income
+    unit_kind: per_share
+    canonical_unit: INR_PER_SHARE
+    is_flow: 1
+    definition: >-
+      Basic earnings per equity share in rupees, as reported on the Statement of
+      Profit and Loss. In the FY26 annual report TCS prints a single line
+      "Earnings per equity share: Basic and diluted", so basic and diluted are
+      the same figure there.
+
+  total_equity:
+    display_name: Total equity
+    statement: balance_sheet
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 0
+    definition: >-
+      "Total equity" as reported on the Balance Sheet at the period end date.
+      INCLUDES non-controlling interests (the line is equity attributable to
+      shareholders of the Company plus non-controlling interests).
+
+  cash_and_equivalents:
+    display_name: Cash and cash equivalents
+    statement: balance_sheet
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 0
+    definition: >-
+      "Cash and cash equivalents" as reported on the Balance Sheet at the period
+      end date. Excludes "Other balances with banks" and investments, which are
+      separate lines (treasury investments will be the other_investments metric).

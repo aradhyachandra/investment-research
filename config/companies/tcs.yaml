@@ -1,0 +1,58 @@
+# Company config for TCS. Everything company-specific lives here, not in code.
+
+company:
+  ticker_nse: TCS
+  ticker_bse: null            # TO VERIFY: not filled in yet
+  isin: null                  # TO VERIFY: not filled in yet
+  name: Tata Consultancy Services Limited
+  fiscal_year_end_month: 3    # balance sheet in AR FY26 is "As at 31 March 2026"
+  reporting_currency: INR
+
+# Periods are listed explicitly with real dates. Nothing is inferred from labels.
+# Quarter-label resolution (e.g. "Q2 FY26") arrives in M2 (periods.py).
+periods:
+  - label: FY25
+    period_type: FY
+    fiscal_year: 2025
+    start_date: "2024-04-01"
+    end_date: "2025-03-31"
+  - label: FY26
+    period_type: FY
+    fiscal_year: 2026
+    start_date: "2025-04-01"
+    end_date: "2026-03-31"
+
+# Source documents. `file_name` is what the facts CSV puts in `source_doc`.
+# local_path = data/raw/<file_name>. sha256 is read from sources_hashes.txt at load time.
+sources:
+  - file_name: tcs_annual_report_FY26.pdf
+    doc_type: annual_report
+    title: TCS Integrated Annual Report 2025-26
+    publisher: Tata Consultancy Services Limited
+    url: null
+    published_date: null       # TO VERIFY: publication date not recorded (auditor's report is dated 9 April 2026)
+    period_covered: FY26
+    retrieved_on: "2026-10-03" # TO VERIFY: taken from the PDF's file date on disk
+    licence_note: null         # TO VERIFY
+  - file_name: tcs_factsheet_Q1_FY27.pdf
+    doc_type: fact_sheet
+    title: TCS Financial Results, Quarter I FY 2026-27
+    publisher: Tata Consultancy Services Limited
+    url: null
+    published_date: "2026-07-09" # as printed on the cover
+    period_covered: Q1 FY27
+    retrieved_on: "2026-10-03" # TO VERIFY: taken from the PDF's file date on disk
+    licence_note: null         # TO VERIFY
+
+# Plausibility bands, in each metric's canonical unit. A value outside its band is
+# rejected at load time. Bands are set roughly 2-3x around TCS's actual scale so a
+# 10x slip (crore vs million) or a 1000x slip fails, while normal year-to-year
+# movement passes.
+# TO VERIFY (author): these are provisional engineering guards, not financial
+# assumptions. Widen them if a real FY21+ figure falls outside.
+plausibility_bands:
+  revenue_from_operations: {min: 100000, max: 600000}
+  profit_after_tax:        {min: 15000,  max: 150000}
+  eps_basic:               {min: 40,     max: 400}
+  total_equity:            {min: 40000,  max: 400000}
+  cash_and_equivalents:    {min: 1000,   max: 60000}

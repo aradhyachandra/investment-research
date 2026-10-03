@@ -1,0 +1,11 @@
+ticker,metric_id,period,basis,reported_value,reported_unit,source_doc,source_page,source_page_label,entered_by
+TCS,revenue_from_operations,FY26,consolidated,267021,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude (pending Aradhya check)
+TCS,revenue_from_operations,FY25,consolidated,255324,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude (pending Aradhya check)
+TCS,profit_after_tax,FY26,consolidated,49454,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude (pending Aradhya check)
+TCS,profit_after_tax,FY25,consolidated,48797,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude (pending Aradhya check)
+TCS,eps_basic,FY26,consolidated,136.01,INR_PER_SHARE,tcs_annual_report_FY26.pdf,167,197,Claude (pending Aradhya check)
+TCS,eps_basic,FY25,consolidated,134.19,INR_PER_SHARE,tcs_annual_report_FY26.pdf,167,197,Claude (pending Aradhya check)
+TCS,total_equity,FY26,consolidated,108478,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude (pending Aradhya check)
+TCS,total_equity,FY25,consolidated,95771,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude (pending Aradhya check)
+TCS,cash_and_equivalents,FY26,consolidated,6417,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude (pending Aradhya check)
+TCS,cash_and_equivalents,FY25,consolidated,8342,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude (pending Aradhya check)
