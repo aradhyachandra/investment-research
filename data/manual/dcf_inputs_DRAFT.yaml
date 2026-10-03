@@ -1,0 +1,136 @@
+# DRAFT - TCS DCF assumptions drafted by Claude for Aradhya. NOT yet reviewed by Aradhya or a finance partner.
+# Illustrative: what these assumptions imply. Not a prediction. Not investment advice.
+# Money in INR crore, consolidated Ind AS, FY26 (year ended 31 Mar 2026). AR = TCS Integrated Annual Report 2025-26 (PDF page numbers).
+ticker: TCS
+label: "TCS DRAFT (Claude-drafted, pending author review)"
+units:
+  money: INR_CRORE
+  shares: SHARES_CRORE
+shared:
+  valuation_date:
+    value: "2026-03-31"
+    rationale: "Balance-sheet date of the last annual report; bridge items are as at this date. Year-end discounting."
+    source: "AR FY26 balance sheet, PDF p.166"
+  forecast_horizon_years:
+    value: 5
+    rationale: "Five explicit years, then terminal value. TO VERIFY with finance partner."
+    source: "Author judgement (draft)"
+  base_year_revenue:
+    value: 267021
+    rationale: "FY26 consolidated revenue from operations."
+    source: "AR FY26 statement of profit and loss, PDF p.167"
+  revenue_growth:
+    value: [0.06, 0.07, 0.07, 0.065, 0.06]
+    rationale: "FY26 grew 4.6% (267,021 vs 255,324). Base assumes modest recovery then fade to ~6%. Judgement, not a forecast."
+    source: "AR FY26 PDF p.167 for history; draft judgement"
+  ebit_margin:
+    value: 0.247
+    rationale: "Lease-adjusted EBIT = PBT before exceptional 70,013 - other income 4,402 + finance costs 1,227 - lease interest 778 = 66,060, i.e. 24.7% of revenue. Excludes other income and the one-off exceptional charge; lease interest deducted because leases are treated as an operating cost."
+    source: "AR FY26 PDF p.167 (P&L) and lease note PDF p.200 (interest on lease liabilities 778)"
+  tax_rate:
+    value: 0.2517
+    rationale: "Indian statutory rate 25.17%. FY26 effective rate 24.5% was helped by 1,878 of prior-year tax benefits, so not used as a steady state."
+    source: "AR FY26 tax note PDF p.221"
+  da_pct_revenue:
+    value: 0.0138
+    rationale: "D&A 5,560 less right-of-use depreciation 1,866 = 3,694 = 1.38% of revenue. ROU depreciation excluded because lease cost stays inside EBIT."
+    source: "AR FY26 PDF p.167 (D&A) and PDF p.200 (ROU depreciation)"
+  capex_pct_revenue:
+    value: 0.0151
+    rationale: "Capex 3,670 (PPE) + 367 (intangibles) = 4,037 = 1.51% of revenue."
+    source: "AR FY26 cash flow statement PDF p.172-173"
+  nwc_pct_incremental_revenue:
+    value: 0.19
+    rationale: "FY26 working-capital outflow of about 2,210 on 11,697 of extra revenue is about 19%. TO VERIFY the working-capital line definition."
+    source: "AR FY26 cash flow statement PDF p.172-173"
+  risk_free_rate:
+    value: 0.0534
+    rationale: "Damodaran-style default-free rupee rate: India 10Y G-sec 7.21% minus India default spread 1.87%, to avoid double counting country risk with the total ERP. TO VERIFY: yield is Oct 2026, spread is Jan 2026 table."
+    source: "tradingeconomics.com/india/government-bond-yield (1 Oct 2026); Damodaran ctryprem (updated 5 Jan 2026)"
+  equity_risk_premium:
+    value: 0.0708
+    rationale: "Damodaran total ERP for India (mature 4.23% + country risk 2.85%). TO VERIFY against the July 2026 update."
+    source: "Damodaran ctryprem table, Jan 2026"
+  beta:
+    value: 1.07
+    rationale: "TCS beta vs NIFTY50, 4-year monthly. A second source shows 1.13 (3-year, benchmark unclear); bear case uses 1.13. TO VERIFY."
+    source: "topstockresearch.com (undated); gurufocus.com (1 Oct 2026)"
+  debt_weight:
+    value: 0.0
+    rationale: "No borrowings on the consolidated balance sheet; all-equity, so WACC equals cost of equity."
+    source: "AR FY26 balance sheet PDF p.166"
+  cost_of_debt_pre_tax:
+    value: 0.08
+    rationale: "Unused because debt weight is 0."
+    source: "Draft placeholder"
+  debt_tax_rate:
+    value: 0.2517
+    rationale: "Unused because debt weight is 0."
+    source: "AR FY26 PDF p.221"
+  terminal_growth:
+    value: 0.05
+    rationale: "Below WACC and below the 5.34% risk-free rate; roughly long-run nominal growth for a mature IT services firm. TO VERIFY."
+    source: "Author judgement (draft)"
+  cash_and_investments:
+    value: 43998
+    rationale: "Cash 6,417 + other bank balances 6,491 + current investments 33,770 + non-current investments 218 = 46,896, less earmarked balances 609 and TCS Foundation deposits 2,289 that are not free cash. Other income is excluded from FCFF so this treasury is added once, here."
+    source: "AR FY26 balance sheet PDF p.166; other bank balances note PDF p.185"
+  debt:
+    value: 0
+    rationale: "No borrowings reported."
+    source: "AR FY26 balance sheet PDF p.166"
+  lease_liabilities:
+    value: 0
+    rationale: "Leases treated as an operating cost (ROU depreciation and lease interest stay in EBIT, no add-back), so lease liabilities of 11,283 are NOT also subtracted. Consistency rule from the plan."
+    source: "AR FY26 lease note PDF p.200 (liability 11,283 = 1,830 + 9,453)"
+  minority_interest:
+    value: 1364
+    rationale: "Non-controlling interests 1,238 plus Class B CCPS of a subsidiary 126, at book value."
+    source: "AR FY26 balance sheet PDF p.166"
+  diluted_shares:
+    value: 361.80875
+    rationale: "Weighted average 361,80,87,518 shares = 361.80875 crore; no dilutive securities reported."
+    source: "AR FY26 EPS note PDF p.224"
+scenarios:
+  base:
+    description: "Base: shared assumptions as drafted."
+  bear:
+    description: "Bear: slower growth, lower margin, higher tax and beta, lower terminal growth."
+    revenue_growth:
+      value: [0.03, 0.04, 0.04, 0.04, 0.04]
+      rationale: "Growth stays near or below FY26's 4.6%."
+      source: "Draft judgement"
+    ebit_margin:
+      value: 0.235
+      rationale: "Margin about 1.2 points lower than FY26 (24.7%)."
+      source: "Draft judgement"
+    tax_rate:
+      value: 0.27
+      rationale: "Higher cash tax as prior-year benefits stop and foreign-income mix shifts."
+      source: "Draft judgement; AR FY26 PDF p.221"
+    beta:
+      value: 1.13
+      rationale: "Higher of the two beta sources."
+      source: "gurufocus.com (1 Oct 2026)"
+    terminal_growth:
+      value: 0.04
+      rationale: "Lower long-run growth."
+      source: "Draft judgement"
+  bull:
+    description: "Bull: faster growth, slightly higher margin, lower beta."
+    revenue_growth:
+      value: [0.09, 0.10, 0.10, 0.09, 0.08]
+      rationale: "Demand recovery well above FY26 growth."
+      source: "Draft judgement"
+    ebit_margin:
+      value: 0.255
+      rationale: "Margin about 0.8 points above FY26."
+      source: "Draft judgement"
+    beta:
+      value: 1.0
+      rationale: "Market-level risk."
+      source: "Draft judgement"
+    terminal_growth:
+      value: 0.0525
+      rationale: "Still below the 5.34% risk-free rate."
+      source: "Draft judgement"
