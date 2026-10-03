@@ -1,0 +1,54 @@
+# Document ingestion and retrieval settings (M4). Method settings, not company facts.
+# Values marked TO VERIFY were picked by Claude on a first look at the TCS annual report
+# and should be revisited once the real eval questions (P0.4) exist.
+
+# Only these source_document.doc_type values may be indexed. generated_sample (LLM notes)
+# and analyst_note (author's report, not built yet) are refused.
+indexable_doc_types: [annual_report, fact_sheet, quarterly_results]
+
+# Never index anything under these folders, whatever the config says.
+forbidden_dirs: [data/sample/generated]
+
+embedding:
+  # The one embedding model. Called only through erp.ingest.embed.embed_texts.
+  model: nomic-embed-text
+  ollama_url: http://localhost:11434
+  batch_size: 16            # small batches: the author's laptop has 8 GB RAM
+  timeout_seconds: 120
+  # nomic-embed-text expects a task prefix on every input (per its model card).
+  # TO VERIFY: Ollama does not add these itself (checked: not documented as doing so).
+  document_prefix: "search_document: "
+  query_prefix: "search_query: "
+
+chroma:
+  path: data/chroma          # gitignored
+  collection: documents
+
+pdf:
+  # Lines whose top edge is within this many points of the page top/bottom are running
+  # headers/footers ("Statutory Reports", page numbers) and are dropped from chunk text.
+  header_band: 55
+  footer_band: 40
+  # A line is a heading if it is bold and at least this many points larger than the body
+  # text size (the most common font size in the document).
+  heading_min_size_gap: 1.5
+  heading_max_chars: 120
+
+chunking:
+  max_chars: 1500            # ~300-400 tokens; nomic-embed-text context is 2048 tokens
+  overlap_chars: 200         # carried from the end of one chunk into the next (same section)
+  min_chars: 200             # a page-end piece shorter than this joins the next page's
+                             # first chunk if no new heading starts there (chunk then spans pages)
+
+tables:
+  # A chunk is "table heavy" if either share is reached:
+  #   numeric_line_share:  lines with digits and no letters / all lines. PyMuPDF puts each
+  #     table cell on its own line, so statements score 0.5-0.7 and prose ~0.0.
+  #   numeric_token_share: number tokens / all tokens (tables extracted one row per line).
+  # TO VERIFY: chosen by eye on the FY26 annual report. Chunks at 0.25-0.35 lines were
+  # attendance grids, GRI index pages and infographics; 0.15-0.25 was mostly prose.
+  numeric_line_share: 0.30
+  numeric_token_share: 0.50
+  # search_documents multiplies a table-heavy chunk's score by this before ranking.
+  # TO VERIFY: arbitrary first value; tune on the eval set.
+  score_weight: 0.85

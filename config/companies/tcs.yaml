@@ -47,6 +47,13 @@ sources:
     accounting_standard: Ind AS  # the financial statements in the annual report are Ind AS
     retrieved_on: "2026-10-03" # TO VERIFY: taken from the PDF's file date on disk
     licence_note: null         # TO VERIFY
+    # Printed page numbers (the PDF has no embedded page labels). Read by Claude from the page
+    # footers; the ingest re-reads footers and reports any disagreement. TO VERIFY (author).
+    # PDF 1-3 (cover, founder, contents) and 359-360 (back cover) print no number.
+    # PDF 4-33 are two-page spreads: PDF 4 = printed 4 (left half) and 5 (right half).
+    page_labels:
+      - {pdf_pages: [4, 33], first_printed: 4, per_pdf_page: 2}
+      - {pdf_pages: [34, 358], first_printed: 64}
   - file_name: tcs_factsheet_Q1_FY27.pdf
     doc_type: fact_sheet
     title: TCS Financial Results, Quarter I FY 2026-27
@@ -61,6 +68,14 @@ sources:
       Ind AS: [21, 22]             # Ind AS income statement and balance sheet, consolidated
     retrieved_on: "2026-10-03" # TO VERIFY: taken from the PDF's file date on disk
     licence_note: null         # TO VERIFY
+    # Slide numbers as printed. Title/divider slides (1, 3, 7, 11, 13) and the last slide (24)
+    # print no number. TO VERIFY (author).
+    page_labels:
+      - {pdf_pages: [2, 2], first_printed: 2}
+      - {pdf_pages: [4, 6], first_printed: 4}
+      - {pdf_pages: [8, 10], first_printed: 8}
+      - {pdf_pages: [12, 12], first_printed: 12}
+      - {pdf_pages: [14, 23], first_printed: 14}
 
 # Plausibility bands, in each metric's canonical unit. A value outside its band is
 # rejected at load time. Bands are set roughly 2-3x around TCS's actual scale so a

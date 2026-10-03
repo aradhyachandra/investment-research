@@ -2,6 +2,62 @@
 
 Open questions, TO VERIFY items, and validation TODOs. Newest first.
 
+## TO VERIFY / decide (from M4, 2026-10-04)
+
+**PDF extraction quality (FY26 annual report, PyMuPDF 1.28.2)**
+- **Chunk text is never a source of numbers.** Numbers in extracted text are often mangled:
+  stray spaces inside figures ("2, 7 1, 423" for 2,71,423), digits split across lines, table
+  cells on separate lines. Numbers come from SQLite only; chunks answer qualitative questions.
+- **Table-heavy flag.** `is_table_heavy` is set when >= 30% of a chunk's lines are numbers-only
+  or >= 50% of its tokens are numbers (`config/ingest.yaml`, thresholds chosen by eye, TO VERIFY).
+  229 of 1118 annual report chunks are flagged. `search_documents` multiplies their score by 0.85
+  (TO VERIFY, arbitrary). Side effect seen: a qualitative sentence sitting inside a table chunk is
+  penalised too (e.g. "no single customer is 10% or more of revenue", PDF 226).
+- **Letter-spaced text.** On about 30 pages (mostly the designed intro spreads, PDF 5-31, plus
+  some headings) words come out split: "T C S ’ I nteg rated". The spaces are real characters in
+  the PDF (fonts with zero-width glyphs), so they are left as they are; any repair would be a guess.
+  Retrieval on those pages is weaker.
+- **Broken glyph mapping.** Some text has a wrong character map, e.g. PDF 24 (Financial Capital)
+  "deĐůared three interiŵ diǀidends", PDF 37 "Đonsideration". Left as is.
+- **No embedded page labels or bookmarks.** Printed page numbers are configured per source in
+  `config/companies/tcs.yaml` (`page_labels`), read by Claude from the footers. TO VERIFY (author).
+  AR: PDF 4-33 are two-page spreads (PDF 4 = printed 4|5), PDF 34-358 = printed 64-388;
+  PDF 1-3 and 359-360 print no number. Fact sheet: slide number = PDF index, where printed.
+- **Footer digits missing from the text layer** on 57 AR pages (e.g. PDF 60 prints "90" but only
+  "9" is extractable). The ingest re-reads every footer and compares with the config: today
+  0 contradictions, 57 "missing digits" (config kept). Fact sheet: 0 warnings.
+- **Section detection is coarse.** A section is the latest bold line >= 1.5 pt above body size.
+  Many sub-headings (e.g. each MD&A risk title, "Cyber Attacks (R & O)") are body-size bold and
+  are not detected, so e.g. PDF 61-67 all carry "Enterprise Risk Management". Some section names
+  are letter-spaced or carry footnote digits ("H uman Capital1").
+- **Reading order** follows the PDF's own text order (not sorted by position), which keeps the
+  two columns apart on TCS pages. Not checked page by page.
+
+**Embeddings and the vector store**
+- **nomic-embed-text task prefixes** ("search_document: ", "search_query: ") are added in code
+  (`config/ingest.yaml`). TO VERIFY that Ollama does not also add them.
+- **Chroma must never embed by itself.** Found while testing: with `embedding_function=None`,
+  calling Chroma with `query_texts` downloaded its default ONNX model (~80 MB) from the internet.
+  The collection now has an embedding function that always refuses; a test covers it. That one
+  test download is in `~/.cache/chroma/onnx_models/` on the author's laptop (outside the repo).
+- **Telemetry** is turned off (`anonymized_telemetry=False`). TO VERIFY that Chroma 1.5.9 makes
+  no other outbound calls.
+- **Score** = 1 - cosine distance. Not comparable across embedding models.
+- **Licensing**: PyMuPDF is AGPL-3.0 (or commercial). TO VERIFY it is acceptable for this repo.
+- **Re-index triggers**: registered sha256 changed, or embedding model name changed. A document
+  removed from config is NOT removed from Chroma (delete `data/chroma/` to rebuild).
+- **source_id stability**: ids are assigned when `load_facts --replace` seeds `source_document`
+  in config order. Reordering or inserting sources in `tcs.yaml` changes the ids and leaves Chroma
+  pointing at old ones. Until this is guarded, delete `data/chroma/` and re-index after any such change.
+- Indexing the AR + fact sheet took ~60 s with peak memory ~245 MB (batches of 16).
+
+**Retrieval baseline (PROVISIONAL, not the eval)**
+- 12 probes in `tests/provisional_retrieval_probes.jsonl`, written by Claude from its own reading.
+  recall@5 = 9 of 12, recall@10 = 11 of 12 (2026-10-04). Expected pages are Claude's judgement and
+  may be too narrow (PROV-10: top hits were PDF 13-14 "AI-led transformation at TCS", arguably
+  relevant). PROV-05 is sensitive to wording ("of revenue" finds PDF 293 at rank 3; "of TCS's
+  revenue" misses). No threshold set; the real target comes from the author's P0.4 questions.
+
 ## TO VERIFY / decide (from M3, 2026-10-04)
 
 - **Discounting convention**: year-end, whole years (DF_t = 1/(1+WACC)^t). Mid-year

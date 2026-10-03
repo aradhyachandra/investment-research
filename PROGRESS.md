@@ -1,5 +1,69 @@
 # PROGRESS
 
+## 2026-10-04 — M4: annual report PDF -> chunks -> ChromaDB; search_documents
+
+**Done**
+- `src/erp/ingest/pdf_to_chunks.py`: PyMuPDF text per page (PDF text order), running
+  headers/footers dropped, two-page spreads split into halves, headings by font (bold and
+  >= 1.5 pt above body size), chunks of <= ~1500 chars on line boundaries with 200-char overlap,
+  kept within one page except a short page-end piece (< 200 chars) that joins the next page when
+  no new heading starts there (then `page`..`page_end`). `is_table_heavy` flag. Printed page
+  labels from config, with a footer cross-check that reports disagreements.
+- `src/erp/ingest/embed.py`: `embed_texts(texts, purpose)`, the one embedding function (Ollama
+  `/api/embed`, model and URL from `config/ingest.yaml`, task prefixes for nomic-embed-text);
+  `ollama_status()` for checks and test skips.
+- `src/erp/ingest/index_chroma.py`: `ChunkMetadata` (pydantic) validates every chunk before any
+  write; `ingest_source` (registered in SQLite `source_document`, doc type in
+  annual_report/fact_sheet/quarterly_results, not under `data/sample/generated/`, file sha256
+  = registered sha256; skip if unchanged, re-index if hash or embedding model changed, never leave
+  half a document); `ingest_registered`; CLI. Chroma under `data/chroma/` (gitignored), cosine,
+  telemetry off, built-in embedder disabled.
+- `src/erp/tools/search.py`: `search_documents(query, top_k=5, doc_type, fiscal_year, source_id)`
+  -> `list[SearchResult]` (pydantic): text, source_id, doc_type, doc_title, fiscal_year, page,
+  page_end, page_label, section, chunk_id, is_table_heavy, score. Sorted by score; table-heavy
+  scores x 0.85; records without a valid page/source_id are dropped with a warning.
+- Config: new `config/ingest.yaml`; `page_labels` for both sources in `config/companies/tcs.yaml`.
+- Real run: AR FY26 -> 1118 chunks (229 table-heavy), fact sheet Q1 FY27 -> 20 chunks (15),
+  ~60 s, ~245 MB peak. Re-run: both skipped in ~1 s.
+- PROVISIONAL retrieval probes (12, `tests/provisional_retrieval_probes.jsonl`, runner
+  `tests/run_provisional_probes.py`): recall@5 = 9 of 12, recall@10 = 11 of 12. Baseline only.
+- Tests: 313 passing (61 new: chunking on built PDFs + real AR checks, metadata validation,
+  idempotency/re-index/refusals, search filters/order/down-rank, probe-file format, 2 live Ollama
+  tests that skip automatically when Ollama or the model is missing).
+- Pinned `pymupdf==1.28.2`, `chromadb==1.5.9` and chromadb's dependencies.
+
+**Decisions**
+- Metadata uses `doc_type` (the `source_document` column) where plan 8.5 says `source_type`.
+- `source_id` comes from SQLite, so `erp.db.load_facts` must have built the DB first; the
+  Chroma ids are `src{source_id}-{sha[:12]}-p{page}-{n}` (stable for the same file and DB).
+- Printed page labels come from config, not footers (footers drop digits in this PDF). Pages
+  without a printed number get `page_label = ""` (Chroma metadata cannot hold None).
+- Spread halves share the PDF page index but get their own printed label (PDF 4 -> "4" / "5").
+- `fiscal_year` = fiscal year of the document's `period_covered` (Q1 FY27 fact sheet -> 2027).
+- An unregistered or changed-but-not-re-registered file is refused rather than indexed.
+- The probe runner lives in `tests/` but is not a pytest test (needs Ollama and the real index).
+
+**Known issues / flags for the author**
+- Plan M4 acceptance is recall@k on the dev category E questions with a target set after a
+  first run. Those questions don't exist yet (P0.4), so only the provisional baseline is recorded.
+- Extraction quality issues (letter-spacing, broken glyphs, mangled numbers, coarse sections):
+  see NOTES.md. `page_labels` ranges need the author's check.
+- Chroma downloaded its default ONNX model once during Claude's exploration (before the guard
+  existed): ~80 MB in `~/.cache/chroma/onnx_models/`, outside the repo. Safe to delete.
+- The plan's corpus includes the author's report (`analyst_note`); not indexed in M4 by request.
+
+**Next**
+- M5: tool layer + agent loop (Router v0) + structured Answer (not started). Run P0.6 model test first.
+
+**How to run**
+```
+PYTHONPATH=src .venv/bin/python -m erp.db.load_facts --csv data/sample/facts_sample.csv --entry-method llm_extracted --replace
+PYTHONPATH=src .venv/bin/python -m erp.ingest.index_chroma --db data/db/sample.sqlite
+PYTHONPATH=src:tests .venv/bin/python tests/run_provisional_probes.py
+```
+
+---
+
 ## 2026-10-04 — M3: DCF engine, assumptions loader, checks, run_dcf
 
 **Done**
