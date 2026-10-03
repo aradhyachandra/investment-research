@@ -26,9 +26,10 @@ def assert_rejected(conn, ctx, rows, *expected_words):
 # ---------- the real sample loads cleanly ----------
 
 def test_sample_csv_loads_cleanly(conn, ctx):
+    n = len(read_sample_rows())
     ids = load_facts_csv(conn, SAMPLE_CSV, ctx, entry_method="llm_extracted")
-    assert len(ids) == 10
-    assert fact_count(conn) == 10
+    assert len(ids) == n
+    assert fact_count(conn) == n
 
 
 def test_loaded_units_match_canonical_unit(conn, ctx):
@@ -50,10 +51,12 @@ def test_loaded_value_equals_reported_times_factor(conn, ctx):
 
 def test_loaded_provenance_fields(conn, ctx):
     load_facts_csv(conn, SAMPLE_CSV, ctx, entry_method="llm_extracted")
-    rows = conn.execute(
-        "SELECT DISTINCT entry_method, verified_by, basis FROM fact"
-    ).fetchall()
-    assert rows == [("llm_extracted", None, "consolidated")]
+    rows = conn.execute("SELECT DISTINCT entry_method, basis FROM fact").fetchall()
+    assert rows == [("llm_extracted", "consolidated")]
+    # verified_by is stored exactly as the CSV gives it (blank -> NULL)
+    expected = sorted((r.get("verified_by") or "").strip() or "" for r in read_sample_rows())
+    stored = sorted(v or "" for (v,) in conn.execute("SELECT verified_by FROM fact"))
+    assert stored == expected
     pages = conn.execute(
         "SELECT source_page, source_page_label FROM fact "
         "WHERE metric_id = 'revenue_from_operations' AND period_id = "
@@ -87,14 +90,18 @@ def test_source_documents_seeded_with_hashes(conn):
 def test_metrics_seeded_from_config(conn):
     ids = {r[0] for r in conn.execute("SELECT metric_id FROM metric")}
     assert ids == {
-        "revenue_from_operations", "profit_after_tax", "eps_basic",
-        "total_equity", "cash_and_equivalents",
+        "revenue_from_operations", "profit_after_tax", "profit_attributable_to_owners",
+        "eps_basic", "total_equity", "cash_and_equivalents",
     }
-    pat_def = conn.execute(
-        "SELECT definition FROM metric WHERE metric_id = 'profit_after_tax'"
-    ).fetchone()[0]
-    assert "Profit for the year" in pat_def
-    assert "non-controlling" in pat_def
+    defs = dict(conn.execute("SELECT metric_id, definition FROM metric"))
+    assert "profit for the year, including non-controlling interests" in defs["profit_after_tax"]
+    owners = " ".join(defs["profit_attributable_to_owners"].split()).lower()
+    assert "attributable to shareholders of the company" in owners
+    assert "after non-controlling interests" in owners
+    assert "statutory (after exceptional items)" in owners
+    is_flow, unit = conn.execute(
+        "SELECT is_flow, canonical_unit FROM metric WHERE metric_id = 'profit_attributable_to_owners'").fetchone()
+    assert (is_flow, unit) == (1, "INR_CRORE")
 
 
 # ---------- units ----------
@@ -172,7 +179,7 @@ def test_rejects_duplicate_against_database(conn, ctx):
     load_facts_csv(conn, SAMPLE_CSV, ctx, entry_method="llm_extracted")
     with pytest.raises(LoadError, match="(?i)duplicate"):
         load_facts_csv(conn, SAMPLE_CSV, ctx, entry_method="llm_extracted")
-    assert fact_count(conn) == 10
+    assert fact_count(conn) == len(read_sample_rows())
 
 
 @pytest.mark.parametrize("basis", ["", "Consolidated", "group", "adjusted"])

@@ -10,19 +10,24 @@
 # Every ratio also has: display_name, formula_version (bump it when the definition
 # changes, so old computed_metric rows stay interpretable), unit, definition.
 
+# Basis of every ratio below: statutory figures as reported, after exceptional items.
+# TCS's own headline margins in its fact sheets exclude exceptional items, so a ratio here can
+# differ from the margin TCS quotes for the same period.
+
 ratios:
-  pat_margin:
-    display_name: PAT margin
+  net_margin:
+    display_name: Net margin
     kind: quotient
-    numerator: profit_after_tax
+    numerator: profit_attributable_to_owners
     denominator: revenue_from_operations
     multiplier: 100
     unit: PERCENT
-    formula_version: pat_margin.v1
+    formula_version: net_margin.v1
     definition: >-
-      Profit for the year (profit_after_tax, INCLUDING non-controlling interests) divided by
-      revenue from operations (excluding other income), same period, as a percentage.
-      TO VERIFY (author): some analysts use profit attributable to shareholders instead.
+      Profit attributable to shareholders of the Company (after non-controlling interests)
+      divided by revenue from operations (excluding other income), same period, as a
+      percentage. Basis: statutory, after exceptional items. Note: TCS's own headline margins
+      in its fact sheets exclude exceptional items, so they can differ from this figure.
 
   revenue_growth_yoy:
     display_name: Revenue growth (year on year)
@@ -32,19 +37,23 @@ ratios:
     unit: PERCENT
     formula_version: revenue_growth_yoy.v1
     definition: >-
-      Change in revenue from operations versus the same period one fiscal year earlier,
-      as a percentage of the earlier figure. Reported rupee figures, not constant currency.
+      Change in revenue from operations versus the same period one fiscal year earlier, as a
+      percentage of the earlier figure. Reported rupee figures, not constant currency.
+      Basis: statutory, after exceptional items (revenue is not itself adjusted for them).
+      Note: TCS's own headline margins in its fact sheets exclude exceptional items.
 
-  pat_growth_yoy:
-    display_name: PAT growth (year on year)
+  net_profit_growth_yoy:
+    display_name: Net profit growth (year on year)
     kind: yoy_growth
-    metric: profit_after_tax
+    metric: profit_attributable_to_owners
     multiplier: 100
     unit: PERCENT
-    formula_version: pat_growth_yoy.v1
+    formula_version: net_profit_growth_yoy.v1
     definition: >-
-      Change in profit for the year (incl. non-controlling interests) versus the same period
-      one fiscal year earlier, as a percentage of the earlier figure.
+      Change in profit attributable to shareholders of the Company versus the same period one
+      fiscal year earlier, as a percentage of the earlier figure. Basis: statutory, after
+      exceptional items. Note: TCS's own headline margins in its fact sheets exclude
+      exceptional items, so growth on TCS's headline basis can differ.
 
   eps_growth_yoy:
     display_name: EPS growth (year on year)
@@ -55,5 +64,7 @@ ratios:
     formula_version: eps_growth_yoy.v1
     definition: >-
       Change in basic EPS versus the same period one fiscal year earlier, as a percentage of
-      the earlier figure. Uses EPS as reported; no adjustment for bonus issues or splits
-      (TO VERIFY if comparing years where the share count changed for that reason).
+      the earlier figure. Basis: statutory, after exceptional items (reported EPS). Note:
+      TCS's own headline margins in its fact sheets exclude exceptional items. No adjustment
+      for bonus issues or splits (TO VERIFY if comparing years where the share count changed
+      for that reason).

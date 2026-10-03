@@ -46,12 +46,19 @@ def test_fy26_revenue_with_provenance(loaded):
     assert f.entry_method == "llm_extracted"
     assert f.verified_by is None
     assert f.verified is False
+    # duplicate policy fields (M2.1)
+    assert f.accounting_standard == "Ind AS"
+    assert f.primary_source is True       # AR FY26 is the document for FY26
+    assert f.cross_checked_by == []
+    assert f.restated is False
+    assert f.supersedes_fact_id is None
 
 
 def test_basis_defaults_to_consolidated(loaded):
     f = get_financial_fact(loaded, "TCS", "profit_after_tax", "FY25")
     assert f.basis == "consolidated"
     assert f.value == 48797
+    assert f.primary_source is False      # FY25 comes from AR FY26, not from an FY25 document
 
 
 def test_per_share_metric(loaded):
@@ -96,10 +103,14 @@ def test_restated_fact_replaces_the_old_one(loaded):
             " reported_unit, conversion_factor, source_id, source_page, entry_method, entered_by,"
             " restated, supersedes_fact_id)"
             " SELECT company_id, metric_id, period_id, basis, 255000, unit, 255000, reported_unit, 1,"
-            " 2, 1, 'manual', 'test', 1, fact_id FROM fact WHERE fact_id = ?", (old.fact_id,))
+            " 2, 21, 'manual', 'test', 1, fact_id FROM fact WHERE fact_id = ?", (old.fact_id,))
     new = get_financial_fact(loaded, "TCS", "revenue_from_operations", "FY25")
     assert new.fact_id != old.fact_id
     assert new.value == 255000
+    assert new.restated is True
+    assert new.supersedes_fact_id == old.fact_id
+    original = get_financial_fact(loaded, "TCS", "revenue_from_operations", "FY25", as_first_reported=True)
+    assert original.fact_id == old.fact_id
 
 
 # ---------- errors: never guess ----------
@@ -147,16 +158,19 @@ def test_metric_known_but_empty_database_raises(conn):
         get_financial_fact(conn, "TCS", "revenue_from_operations", "FY26")
 
 
-def test_same_fact_from_two_sources_is_ambiguous(conn, ctx):
-    rows = [sample_row("revenue_from_operations", "FY26")]
-    second = dict(rows[0])
-    # Test-only row: pretend the fact sheet also prints FY26 revenue (page is made up for the test).
-    second["source_doc"] = "tcs_factsheet_Q1_FY27.pdf"
-    second["source_page"] = "1"
-    second["source_page_label"] = ""
-    load_rows(conn, rows + [second], ctx, entry_method="manual")
-    with pytest.raises(AmbiguousFactError, match="2 facts"):
-        get_financial_fact(conn, "TCS", "revenue_from_operations", "FY26")
+def test_disagreeing_current_facts_are_ambiguous(loaded):
+    # The loader rejects disagreeing duplicates, so this can only happen if someone writes to
+    # the database directly. The lookup must still refuse rather than pick one.
+    # Test-only value; not a TCS figure.
+    with loaded:
+        loaded.execute(
+            "INSERT INTO fact (company_id, metric_id, period_id, basis, value, unit, reported_value,"
+            " reported_unit, conversion_factor, source_id, source_page, entry_method, entered_by)"
+            " SELECT company_id, metric_id, period_id, basis, 260000, unit, 260000, reported_unit, 1,"
+            " 2, 21, 'manual', 'test' FROM fact WHERE metric_id = 'revenue_from_operations'"
+            " AND period_id = (SELECT period_id FROM period WHERE label = 'FY26')")
+    with pytest.raises(AmbiguousFactError, match="disagree"):
+        get_financial_fact(loaded, "TCS", "revenue_from_operations", "FY26")
 
 
 def test_every_sample_row_is_retrievable(loaded):

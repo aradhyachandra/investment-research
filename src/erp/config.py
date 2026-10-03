@@ -12,7 +12,12 @@ import yaml
 
 from erp.periods import PeriodError, resolve_period
 
+REPO = Path(__file__).resolve().parents[2]
+METRICS_CONFIG = REPO / "config" / "metrics.yaml"
+HASHES_FILE = REPO / "sources_hashes.txt"
+
 METRIC_FIELDS = ("display_name", "statement", "unit_kind", "canonical_unit", "is_flow", "definition")
+ACCOUNTING_STANDARDS = ("Ind AS", "IFRS")
 
 
 class ConfigError(ValueError):
@@ -26,6 +31,8 @@ class LoadContext:
     periods: dict          # label ('FY26') -> period row with real dates
     sources: dict          # file_name -> source_document row (incl. sha256, local_path)
     bands: dict            # metric_id -> {'min': .., 'max': ..} in canonical unit
+    reporting_rounding: dict = None        # reported unit -> printing step, in that unit
+    primary_accounting_standard: str = None  # standard used by lookups unless told otherwise
 
 
 def _read_yaml(path) -> dict:
@@ -50,6 +57,33 @@ def _sha256_of(path: Path) -> str:
         for block in iter(lambda: f.read(1 << 20), b""):
             h.update(block)
     return h.hexdigest()
+
+
+def _check_source_standard(name: str, s: dict) -> None:
+    whole, by_page = s.get("accounting_standard"), s.get("accounting_standard_by_page")
+    if (whole is None) == (by_page is None):
+        raise ConfigError(f"source {name!r}: give exactly one of accounting_standard / accounting_standard_by_page")
+    standards = [whole] if whole is not None else list(by_page)
+    for std in standards:
+        if std not in ACCOUNTING_STANDARDS:
+            raise ConfigError(f"source {name!r}: accounting standard {std!r} is not one of {ACCOUNTING_STANDARDS}")
+    if by_page is not None:
+        seen = {}
+        for std, pages in by_page.items():
+            for page in pages:
+                if page in seen:
+                    raise ConfigError(f"source {name!r}: page {page} listed as both {seen[page]} and {std}")
+                seen[page] = std
+
+
+def accounting_standard_for(source: dict, page: int) -> str | None:
+    """Accounting standard of one page of a source document, or None if not configured."""
+    if source.get("accounting_standard") is not None:
+        return source["accounting_standard"]
+    for std, pages in (source.get("accounting_standard_by_page") or {}).items():
+        if page in pages:
+            return std
+    return None
 
 
 def _check_periods(periods: list, fiscal_year_end_month: int) -> dict:
@@ -99,10 +133,23 @@ def load_context(company_config, metrics_config, hashes_file, raw_dir=None) -> L
     if no_band:
         raise ConfigError(f"no plausibility band configured for metrics: {no_band}")
 
+    rounding = cfg.get("reporting_rounding")
+    if not rounding:
+        raise ConfigError("company config has no reporting_rounding (printing step per reported unit)")
+    standard = cfg.get("primary_accounting_standard")
+    if standard not in ACCOUNTING_STANDARDS:
+        raise ConfigError(f"primary_accounting_standard must be one of {ACCOUNTING_STANDARDS}, got {standard!r}")
+
+    fy_end = cfg["company"]["fiscal_year_end_month"]
     hashes = read_source_hashes(hashes_file)
     sources = {}
     for s in cfg["sources"]:
         name = s["file_name"]
+        _check_source_standard(name, s)
+        try:
+            resolve_period(s.get("period_covered"), fy_end)
+        except PeriodError as e:
+            raise ConfigError(f"source {name!r}: period_covered: {e}") from None
         if name not in hashes:
             raise ConfigError(f"source {name!r} has no sha256 in {hashes_file}")
         row = dict(s, sha256=hashes[name], local_path=f"data/raw/{name}")
@@ -115,7 +162,17 @@ def load_context(company_config, metrics_config, hashes_file, raw_dir=None) -> L
     return LoadContext(
         company=cfg["company"],
         metrics=metrics,
-        periods=_check_periods(cfg["periods"], cfg["company"]["fiscal_year_end_month"]),
+        periods=_check_periods(cfg["periods"], fy_end),
         sources=sources,
         bands=bands,
+        reporting_rounding=rounding,
+        primary_accounting_standard=standard,
     )
+
+
+def company_context(ticker: str) -> LoadContext:
+    """The LoadContext for one company from the default config files (config/companies/<ticker>.yaml)."""
+    path = REPO / "config" / "companies" / f"{ticker.lower()}.yaml"
+    if not path.exists():
+        raise ConfigError(f"no company config for ticker {ticker!r} ({path})")
+    return load_context(path, METRICS_CONFIG, HASHES_FILE, raw_dir=None)

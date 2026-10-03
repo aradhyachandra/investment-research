@@ -3,9 +3,9 @@
 Expected values are literals worked out by hand from data/sample/facts_sample.csv (and
 cross-checked with `bc`, scale=15), NOT by calling the code under test. Inputs (INR crore
 unless stated):
-    revenue_from_operations  FY26 267021   FY25 255324
-    profit_after_tax         FY26  49454   FY25  48797
-    eps_basic (INR/share)    FY26 136.01   FY25 134.19
+    revenue_from_operations        FY26 267021   FY25 255324
+    profit_attributable_to_owners  FY26  49210   FY25  48553   (rows added by the author in M2.1)
+    eps_basic (INR/share)          FY26 136.01   FY25 134.19
 """
 import json
 import re
@@ -33,18 +33,17 @@ REL = 1e-9
 
 # ---------- expected values (hand arithmetic) ----------
 
-# pat_margin FY26 = PAT / revenue x 100 = 49454 / 267021 x 100
-#   49454 / 267021 = 0.185206406986716...
-#   check: 267021 x 0.185 = 49398.885; 49454 - 49398.885 = 55.115;
-#          55.115 / 267021 = 0.000206406986716  -> 0.185206406986716
-#   = 18.5206406986716 %
-PAT_MARGIN_FY26 = 18.5206406986716
+# net_margin FY26 = profit attributable to owners / revenue x 100 = 49210 / 267021 x 100
+#   check: 267021 x 0.184 = 49131.864; 49210 - 49131.864 = 78.136;
+#          78.136 / 267021 = 0.000292621179...  -> 0.184292621179
+#   = 18.4292621179607 %   (bc: 18.429262117960700)
+NET_MARGIN_FY26 = 18.4292621179607
 
-# pat_margin FY25 = 48797 / 255324 x 100
-#   check: 255324 x 0.19 = 48511.56; 48797 - 48511.56 = 285.44;
-#          285.44 / 255324 = 0.0011179520922  -> 0.1911179520922
-#   = 19.1117952092243 %
-PAT_MARGIN_FY25 = 19.1117952092243
+# net_margin FY25 = 48553 / 255324 x 100
+#   check: 255324 x 0.19 = 48511.56; 48553 - 48511.56 = 41.44;
+#          41.44 / 255324 = 0.000162303582...  -> 0.190162303582
+#   = 19.0162303582898 %   (bc: 19.016230358289800)
+NET_MARGIN_FY25 = 19.0162303582898
 
 # revenue_growth_yoy FY26 = (267021 - 255324) / 255324 x 100 = 11697 / 255324 x 100
 #   check: 255324 x 0.045 = 11489.58; 11697 - 11489.58 = 207.42;
@@ -52,11 +51,11 @@ PAT_MARGIN_FY25 = 19.1117952092243
 #   = 4.5812379564788 %
 REVENUE_GROWTH_FY26 = 4.5812379564788
 
-# pat_growth_yoy FY26 = (49454 - 48797) / 48797 x 100 = 657 / 48797 x 100
-#   check: 48797 x 0.0134 = 653.8798; 657 - 653.8798 = 3.1202;
-#          3.1202 / 48797 = 0.0000639424554 -> 0.0134639424554
-#   = 1.3463942455478 %
-PAT_GROWTH_FY26 = 1.3463942455478
+# net_profit_growth_yoy FY26 = (49210 - 48553) / 48553 x 100 = 657 / 48553 x 100
+#   check: 48553 x 0.0135 = 655.4655; 657 - 655.4655 = 1.5345;
+#          1.5345 / 48553 = 0.0000316046382 -> 0.0135316046382
+#   = 1.353160463823 %   (bc: 1.353160463823000)
+NET_PROFIT_GROWTH_FY26 = 1.353160463823
 
 # eps_growth_yoy FY26 = (136.01 - 134.19) / 134.19 x 100 = 1.82 / 134.19 x 100
 #   check: 134.19 x 0.0135 = 1.811565; 1.82 - 1.811565 = 0.008435;
@@ -66,10 +65,10 @@ EPS_GROWTH_FY26 = 1.3562858633281
 
 
 @pytest.mark.parametrize("ratio_id, period, expected", [
-    ("pat_margin", "FY26", PAT_MARGIN_FY26),
-    ("pat_margin", "FY25", PAT_MARGIN_FY25),
+    ("net_margin", "FY26", NET_MARGIN_FY26),
+    ("net_margin", "FY25", NET_MARGIN_FY25),
     ("revenue_growth_yoy", "FY26", REVENUE_GROWTH_FY26),
-    ("pat_growth_yoy", "FY26", PAT_GROWTH_FY26),
+    ("net_profit_growth_yoy", "FY26", NET_PROFIT_GROWTH_FY26),
     ("eps_growth_yoy", "FY26", EPS_GROWTH_FY26),
 ])
 def test_ratio_matches_hand_calculation(loaded, ratio_id, period, expected):
@@ -82,16 +81,16 @@ def test_ratio_matches_hand_calculation(loaded, ratio_id, period, expected):
     assert r.basis == "consolidated"
 
 
-def test_pat_margin_inputs_and_formula(loaded):
-    r = compute_ratio(loaded, "TCS", "pat_margin", "FY26")
-    pat = get_financial_fact(loaded, "TCS", "profit_after_tax", "FY26")
+def test_net_margin_inputs_and_formula(loaded):
+    r = compute_ratio(loaded, "TCS", "net_margin", "FY26")
+    pat = get_financial_fact(loaded, "TCS", "profit_attributable_to_owners", "FY26")
     rev = get_financial_fact(loaded, "TCS", "revenue_from_operations", "FY26")
     assert r.input_fact_ids == [pat.fact_id, rev.fact_id]
     assert [(i.role, i.fact.fact_id) for i in r.inputs] == [
         ("numerator", pat.fact_id), ("denominator", rev.fact_id)]
-    assert "profit_after_tax[FY26]" in r.formula
+    assert "profit_attributable_to_owners[FY26]" in r.formula
     assert "revenue_from_operations[FY26]" in r.formula
-    assert r.formula_version == "pat_margin.v1"
+    assert r.formula_version == "net_margin.v1"
 
 
 def test_growth_uses_same_period_type_one_year_earlier(loaded):
@@ -106,14 +105,14 @@ def test_growth_uses_same_period_type_one_year_earlier(loaded):
 # ---------- computed_metric row ----------
 
 def test_computed_metric_row_is_written(loaded):
-    r = compute_ratio(loaded, "TCS", "pat_margin", "FY26")
+    r = compute_ratio(loaded, "TCS", "net_margin", "FY26")
     row = loaded.execute(
         "SELECT c.ratio_id, p.label, c.value, c.unit, c.formula_version, c.inputs_json,"
         " c.code_version, c.computed_at FROM computed_metric c JOIN period p USING (period_id)"
         " WHERE c.computed_id = ?", (r.computed_id,)).fetchone()
     ratio_id, label, value, unit, formula_version, inputs_json, code_version, computed_at = row
-    assert (ratio_id, label, unit, formula_version) == ("pat_margin", "FY26", "PERCENT", "pat_margin.v1")
-    assert value == pytest.approx(PAT_MARGIN_FY26, rel=REL)
+    assert (ratio_id, label, unit, formula_version) == ("net_margin", "FY26", "PERCENT", "net_margin.v1")
+    assert value == pytest.approx(NET_MARGIN_FY26, rel=REL)
     inputs = json.loads(inputs_json)
     assert inputs["fact_ids"] == r.input_fact_ids
     assert inputs["formula"] == r.formula
@@ -124,13 +123,13 @@ def test_computed_metric_row_is_written(loaded):
 
 
 def test_code_version_is_the_git_sha(loaded):
-    r = compute_ratio(loaded, "TCS", "pat_margin", "FY26")
+    r = compute_ratio(loaded, "TCS", "net_margin", "FY26")
     # This test runs inside the git checkout, so the SHA must be known (not 'unknown').
     assert re.fullmatch(r"[0-9a-f]{40}(-dirty)?", r.code_version), r.code_version
 
 
 def test_each_call_writes_one_row(loaded):
-    compute_ratio(loaded, "TCS", "pat_margin", "FY26")
+    compute_ratio(loaded, "TCS", "net_margin", "FY26")
     compute_ratio(loaded, "TCS", "eps_growth_yoy", "FY26")
     assert loaded.execute("SELECT COUNT(*) FROM computed_metric").fetchone()[0] == 2
 
@@ -147,12 +146,12 @@ def _load_with_verified(conn, ctx, verified_keys):
 
 
 def test_unverified_inputs_give_unverified_ratio(loaded):
-    assert compute_ratio(loaded, "TCS", "pat_margin", "FY26").verified is False
+    assert compute_ratio(loaded, "TCS", "net_margin", "FY26").verified is False
 
 
 def test_all_inputs_verified_gives_verified_ratio(conn, ctx):
-    _load_with_verified(conn, ctx, {("profit_after_tax", "FY26"), ("revenue_from_operations", "FY26")})
-    r = compute_ratio(conn, "TCS", "pat_margin", "FY26")
+    _load_with_verified(conn, ctx, {("profit_attributable_to_owners", "FY26"), ("revenue_from_operations", "FY26")})
+    r = compute_ratio(conn, "TCS", "net_margin", "FY26")
     assert r.verified is True
     assert all(i.fact.verified for i in r.inputs)
 
@@ -179,35 +178,35 @@ def test_unknown_ratio_raises(loaded):
 
 def test_unknown_period_label_raises(loaded):
     with pytest.raises(PeriodError):
-        compute_ratio(loaded, "TCS", "pat_margin", "CY25")
+        compute_ratio(loaded, "TCS", "net_margin", "CY25")
     assert _no_rows_written(loaded)
 
 
 def test_missing_period_raises(loaded):
     # FY24 is a valid label, but no facts exist for it.
     with pytest.raises(FactNotFoundError, match="FY24"):
-        compute_ratio(loaded, "TCS", "pat_margin", "FY24")
+        compute_ratio(loaded, "TCS", "net_margin", "FY24")
     assert _no_rows_written(loaded)
 
 
 def test_quarter_with_no_data_raises(loaded):
     with pytest.raises(FactNotFoundError, match="Q2 FY27"):
-        compute_ratio(loaded, "TCS", "pat_margin", "Q2 FY27")
+        compute_ratio(loaded, "TCS", "net_margin", "Q2 FY27")
 
 
 def test_missing_metric_raises(conn, ctx):
-    # Load everything except FY26 PAT.
+    # Load everything except FY26 profit attributable to owners.
     rows = [r for r in read_sample_rows()
-            if not (r["metric_id"] == "profit_after_tax" and r["period"] == "FY26")]
+            if not (r["metric_id"] == "profit_attributable_to_owners" and r["period"] == "FY26")]
     load_rows(conn, rows, ctx, entry_method="llm_extracted")
-    with pytest.raises(FactNotFoundError, match="profit_after_tax"):
-        compute_ratio(conn, "TCS", "pat_margin", "FY26")
-    with pytest.raises(FactNotFoundError, match="profit_after_tax"):
-        compute_ratio(conn, "TCS", "pat_growth_yoy", "FY26")
+    with pytest.raises(FactNotFoundError, match="profit_attributable_to_owners"):
+        compute_ratio(conn, "TCS", "net_margin", "FY26")
+    with pytest.raises(FactNotFoundError, match="profit_attributable_to_owners"):
+        compute_ratio(conn, "TCS", "net_profit_growth_yoy", "FY26")
     assert _no_rows_written(conn)
 
 
-@pytest.mark.parametrize("ratio_id", ["revenue_growth_yoy", "pat_growth_yoy", "eps_growth_yoy"])
+@pytest.mark.parametrize("ratio_id", ["revenue_growth_yoy", "net_profit_growth_yoy", "eps_growth_yoy"])
 def test_growth_without_prior_year_fact_raises(loaded, ratio_id):
     # FY25 is the earliest year loaded, so FY25 growth has no FY24 base.
     with pytest.raises(FactNotFoundError, match="FY24"):
@@ -225,7 +224,7 @@ def test_growth_with_prior_period_present_but_metric_missing_raises(conn, ctx):
 
 def test_wrong_basis_raises(loaded):
     with pytest.raises(FactNotFoundError, match="standalone"):
-        compute_ratio(loaded, "TCS", "pat_margin", "FY26", basis="standalone")
+        compute_ratio(loaded, "TCS", "net_margin", "FY26", basis="standalone")
 
 
 # ---------- the arithmetic helpers (toy numbers, not TCS figures) ----------
@@ -251,9 +250,23 @@ def test_growth_on_zero_or_negative_base_raises(prior):
 
 def test_four_ratios_defined_in_config():
     ratios = load_ratios(RATIOS_CONFIG, METRICS_CONFIG)
-    assert {"pat_margin", "revenue_growth_yoy", "pat_growth_yoy", "eps_growth_yoy"} <= set(ratios)
-    assert ratios["pat_margin"]["numerator"] == "profit_after_tax"
+    assert set(ratios) == {"net_margin", "revenue_growth_yoy", "net_profit_growth_yoy", "eps_growth_yoy"}
+    assert ratios["net_margin"]["numerator"] == "profit_attributable_to_owners"
+    assert ratios["net_profit_growth_yoy"]["metric"] == "profit_attributable_to_owners"
     assert ratios["eps_growth_yoy"]["metric"] == "eps_basic"
+
+
+def test_pat_ratios_are_gone(loaded):
+    for old in ("pat_margin", "pat_growth_yoy"):
+        with pytest.raises(UnknownRatioError):
+            compute_ratio(loaded, "TCS", old, "FY26")
+
+
+def test_ratio_definitions_state_the_exceptional_items_basis():
+    for ratio_id, r in load_ratios(RATIOS_CONFIG, METRICS_CONFIG).items():
+        text = " ".join(r["definition"].split())
+        assert "statutory, after exceptional items" in text, ratio_id
+        assert "fact sheets exclude exceptional items" in text, ratio_id
 
 
 def _write_ratios(tmp_path, mutate):
@@ -265,13 +278,13 @@ def _write_ratios(tmp_path, mutate):
 
 
 def test_config_with_unknown_metric_is_rejected(tmp_path):
-    path = _write_ratios(tmp_path, lambda r: r["pat_margin"].update(numerator="net_profit"))
+    path = _write_ratios(tmp_path, lambda r: r["net_margin"].update(numerator="net_profit"))
     with pytest.raises(ConfigError, match="net_profit"):
         load_ratios(path, METRICS_CONFIG)
 
 
 def test_config_with_unknown_kind_is_rejected(tmp_path):
-    path = _write_ratios(tmp_path, lambda r: r["pat_margin"].update(kind="cagr"))
+    path = _write_ratios(tmp_path, lambda r: r["net_margin"].update(kind="cagr"))
     with pytest.raises(ConfigError, match="kind"):
         load_ratios(path, METRICS_CONFIG)
 
@@ -285,12 +298,12 @@ def test_config_missing_field_is_rejected(tmp_path):
 def test_ratio_config_is_used_at_run_time(loaded, tmp_path):
     # Swapping numerator and denominator in config changes the result: proof the
     # definition is read from YAML, not hard-coded.
-    # 267021 / 49454 x 100: 49454 x 5.4 = 267051.6, too big by 30.6;
-    # 30.6 / 49454 = 0.000618756... -> 5.4 - 0.000618756 = 5.399381244 -> 539.9381244 %
-    # (bc, scale=15: 539.938124317547)
+    # 267021 / 49210 x 100: 49210 x 5.4 = 265734; 267021 - 265734 = 1287;
+    # 1287 / 49210 = 0.0261532209... -> 5.4261532209 -> 542.61532209 %
+    # (bc, scale=15: 542.615322089006)
     def swap(r):
-        r["pat_margin"]["numerator"], r["pat_margin"]["denominator"] = (
-            r["pat_margin"]["denominator"], r["pat_margin"]["numerator"])
+        r["net_margin"]["numerator"], r["net_margin"]["denominator"] = (
+            r["net_margin"]["denominator"], r["net_margin"]["numerator"])
     path = _write_ratios(tmp_path, swap)
-    r = compute_ratio(loaded, "TCS", "pat_margin", "FY26", ratios_config=path)
-    assert r.value == pytest.approx(539.938124317547, rel=REL)
+    r = compute_ratio(loaded, "TCS", "net_margin", "FY26", ratios_config=path)
+    assert r.value == pytest.approx(542.615322089006, rel=REL)

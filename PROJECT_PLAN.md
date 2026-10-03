@@ -198,11 +198,17 @@ If the author insists on paper: budget a separate digitization step (photo → L
 ### 4.1 Design rules
 1. Every number is stored with **period, basis, unit, currency, and a source (document + page)**.
 2. Canonical units are enforced per metric (Section 4.2). Store the **as-reported** value and unit too, plus the conversion factor, so any unit mix-up is auditable.
-3. Fiscal years are **Indian FY (April–March)**. `FY25` = 1 Apr 2024 – 31 Mar 2025 (TCS fiscal year end is 31 March; to verify against the filing). Store real `start_date` and `end_date`. Never infer period from labels in code.
+3. Fiscal years are **Indian FY (April–March)**. `FY25` = 1 Apr 2024 – 31 Mar 2025 (TCS fiscal year end is 31 March; to verify against the filing). Store real `start_date` and `end_date`. Never infer period from labels in code. The period resolver (`periods.py`) is the single tested source for label-to-date conversion; period dates in config are cross-checked against it at load time.
 4. Restatements create a **new** fact that supersedes the old one; old rows are kept.
 5. Derived values never live in `fact`. They live in `computed_metric` with a formula ID and input fact IDs.
 6. **Page numbers:** the page printed on a page often differs from the PDF's page index (cover, contents, etc.). Store both (`source_page` = PDF index, `source_page_label` = printed number, if different). Citations in the UI show the PDF index with the printed label in brackets, so a reader can find the page either way.
 7. **Company-defined vs computed metrics:** where TCS reports its own figure (e.g. operating margin) and our formula differs (e.g. EBIT-based), keep both: the reported one as a `fact`, ours as a `computed_metric`, with the definitions written down. Eval gold answers must name which definition they use.
+8. **Duplicate facts (same metric, period, basis from more than one document):**
+   - The **primary source** is the document for the fact's own period (each source document's `period_covered`, in config). Other documents that print the same figure are cross-checks.
+   - Same value as printed, after unit conversion, within the printing rounding of each unit: both rows are kept; lookups return the primary and list the others as `cross_checked_by`.
+   - Different value with no restatement link: the loader rejects the load and shows both values with their sources and pages.
+   - Restatement: a row with `restated = 1` and `supersedes_fact_id` (set from the CSV column `supersedes_source_doc`). Lookups return the restated figure by default, flagged as restated; the original stays stored and can be asked for.
+   - Figures are only compared within the same accounting standard (configured per source document, or per page where a document mixes standards, e.g. Ind AS and IFRS pages in a fact sheet). An IFRS figure is never a duplicate of an Ind AS one.
 
 ### 4.2 Metric list for v1 (proposed; finalize in P0.2)
 Income: revenue_from_operations, other_income, total_expenses, employee_benefit_expense, depreciation_amortisation, finance_costs, ebit (as defined in `metric.definition`), profit_before_tax, tax_expense, profit_after_tax, eps_basic, eps_diluted.

@@ -1,8 +1,7 @@
 """Code version (git SHA) recorded with every computed result."""
 import subprocess
-from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
+from erp.config import REPO
 
 
 def _git(*args: str) -> str:

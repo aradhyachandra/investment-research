@@ -11,7 +11,7 @@ import math
 from dataclasses import dataclass
 from datetime import date
 
-from erp.config import LoadContext
+from erp.config import LoadContext, accounting_standard_for
 from erp.units import UnitError, conversion_factor
 
 BASES = ("consolidated", "standalone")
@@ -20,7 +20,9 @@ CSV_COLUMNS = (
     "source_doc", "source_page", "source_page_label", "entered_by",
 )
 # Optional: the author fills these after checking a row against the PDF. Blank = not verified.
-OPTIONAL_COLUMNS = ("verified_by", "verified_on")
+# restated = 1 with supersedes_source_doc = the document whose figure this row replaces
+# (same metric, period, basis and accounting standard). Blank = an ordinary row.
+OPTIONAL_COLUMNS = ("verified_by", "verified_on", "restated", "supersedes_source_doc")
 
 
 @dataclass(frozen=True)
@@ -41,6 +43,10 @@ class Fact:
     entered_by: str
     verified_by: str | None = None
     verified_on: str | None = None     # ISO date
+    accounting_standard: str = ""      # of the cited page, from the source config
+    tolerance: float = 0.0             # half the printing step, in the canonical unit
+    restated: bool = False
+    supersedes_source_doc: str | None = None
 
     def key(self):
         """Same fields as the fact table's UNIQUE constraint."""
@@ -77,6 +83,21 @@ def _check_verification(verified_by: str, verified_on: str, entered_by: str) -> 
     if verified_by and verified_by.casefold() == entered_by.casefold():
         errors.append("verified_by must be a different person from entered_by")
     return errors
+
+
+def _check_restatement(restated: str, supersedes: str, source_doc: str, ctx: LoadContext) -> list[str]:
+    if restated not in ("", "0", "1"):
+        return [f"restated must be 1, 0 or blank, got {restated!r}"]
+    if restated == "1":
+        if not supersedes:
+            return ["restated = 1 needs supersedes_source_doc (the document whose figure it replaces)"]
+        if supersedes not in ctx.sources:
+            return [f"supersedes_source_doc {supersedes!r} is not a known source document"]
+        if supersedes == source_doc:
+            return ["supersedes_source_doc cannot be the row's own source_doc"]
+    elif supersedes:
+        return ["supersedes_source_doc is set but restated is not 1"]
+    return []
 
 
 def check_fact(fact: Fact, ctx: LoadContext) -> list[str]:
@@ -122,6 +143,7 @@ def validate_row(row: dict, row_number: int, ctx: LoadContext) -> tuple[Fact | N
     if not get("entered_by"):
         errors.append("entered_by is empty")
     errors += _check_verification(get("verified_by"), get("verified_on"), get("entered_by"))
+    errors += _check_restatement(get("restated"), get("supersedes_source_doc"), get("source_doc"), ctx)
 
     reported_value = _parse_number(row.get("reported_value"))
     if reported_value is None:
@@ -130,8 +152,18 @@ def validate_row(row: dict, row_number: int, ctx: LoadContext) -> tuple[Fact | N
     if page is None:
         errors.append(f"source_page {row.get('source_page')!r} missing or not a positive whole number")
 
+    standard = None
+    if source is not None and page is not None:
+        standard = accounting_standard_for(source, page)
+        if standard is None:
+            errors.append(f"no accounting standard configured for page {page} of {get('source_doc')!r} "
+                          f"(add it to accounting_standard_by_page in the company config)")
+
     factor = None
     reported_unit = get("reported_unit")
+    step = ctx.reporting_rounding.get(reported_unit)
+    if reported_unit and step is None:
+        errors.append(f"no reporting_rounding configured for reported unit {reported_unit!r}")
     if metric is not None:
         try:
             factor = conversion_factor(reported_unit, metric["canonical_unit"])
@@ -158,6 +190,10 @@ def validate_row(row: dict, row_number: int, ctx: LoadContext) -> tuple[Fact | N
         entered_by=get("entered_by"),
         verified_by=get("verified_by") or None,
         verified_on=get("verified_on") or None,
+        accounting_standard=standard,
+        tolerance=step * factor / 2,
+        restated=get("restated") == "1",
+        supersedes_source_doc=get("supersedes_source_doc") or None,
     )
     return fact, check_fact(fact, ctx)
 

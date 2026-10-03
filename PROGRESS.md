@@ -1,5 +1,59 @@
 # PROGRESS
 
+## 2026-10-04 — M2.1: net margin, duplicate-fact policy (housekeeping)
+
+**Done**
+- New metric `profit_attributable_to_owners` (INR crore, flow; statutory, after exceptional
+  items, after non-controlling interests). `profit_after_tax` definition reworded to
+  "profit for the year, including non-controlling interests". Plausibility band added.
+- Ratios: `pat_margin` -> `net_margin`, `pat_growth_yoy` -> `net_profit_growth_yoy` (both on
+  profit_attributable_to_owners). Every ratio definition states "statutory, after exceptional
+  items" and that TCS's fact-sheet headline margins exclude exceptional items.
+- Duplicate-fact policy (new `src/erp/db/duplicates.py`, loader, `get_financial_fact`):
+  primary source by `period_covered`; agreeing figures kept as `cross_checked_by`;
+  disagreeing figures rejected with both values, sources and pages; restatements via CSV
+  columns `restated` + `supersedes_source_doc` (stored as `restated` / `supersedes_fact_id`),
+  returned by default, original available with `as_first_reported=True`; comparisons only
+  within one accounting standard.
+- Config: `primary_accounting_standard`, per-source `accounting_standard` /
+  `accounting_standard_by_page`, `reporting_rounding` (printing step per reported unit), all in
+  `config/companies/tcs.yaml`. `period_covered` must be a valid period label.
+- PROJECT_PLAN.md 4.1: rule 3 note on the period resolver; new rule 8 (duplicate facts).
+- Fixed a duplicated paragraph in the `load_facts.py` docstring (left over from M2).
+- Tests: 181 total. In this checkout 170 pass and 11 fail; all 11 need the author's two
+  `profit_attributable_to_owners` rows in `data/sample/facts_sample.csv`. With those two rows
+  added to a scratch copy of the repo: 180 passed, 1 skipped (PDF hash test; PDFs not copied).
+
+**Decisions**
+- Accounting standard is NOT a schema column (TO VERIFY, see NOTES.md). It is worked out from
+  the source document and page via config, at load time and at lookup time. So
+  `get_financial_fact` reads the company config (`config/companies/<ticker>.yaml`, or a
+  `ctx=` argument).
+- Fact sheet standards from the page headings: IFRS = PDF pages 14, 16, 17, 18, 20; Ind AS =
+  21, 22. Other pages have no configured standard, so facts cannot cite them yet.
+- "Primary source" = document whose `period_covered` equals the fact's period label exactly
+  (FY26 fact -> AR FY26; Q1 FY27 fact -> Q1 FY27 fact sheet). If none, the first-loaded row is
+  returned and `primary_source` is False (true for all FY25 sample facts today).
+- "Agree" = difference no more than half of each figure's printing step added together
+  (e.g. whole crore vs whole million: 0.5 + 0.05 crore).
+- Restatement checks: a restated row needs the row it replaces to be loaded first (database or
+  earlier in the CSV); rows restating the same figure must agree; a later restatement may
+  supersede an earlier one. Ordinary rows must agree with other ordinary rows (the figures as
+  first published).
+- Every source must declare a standard (stricter than "if a source carries one").
+
+**Known issues / flags for the author**
+- 11 tests fail until you add the two CSV rows (see "what to check").
+- Schema can't hold an Ind AS and an IFRS figure for the same metric/period/basis from the
+  SAME document (UNIQUE constraint has no standard). See NOTES.md.
+- Lookup-time standard depends on config matching the database; if a source is renamed in
+  config, lookups on old rows fail loudly.
+
+**Next**
+- M3: DCF engine + checks + `run_dcf`.
+
+---
+
 ## 2026-10-04 — M2: periods, get_financial_fact, compute_ratio
 
 **Done**

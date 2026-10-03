@@ -8,6 +8,9 @@ company:
   fiscal_year_end_month: 3    # balance sheet in AR FY26 is "As at 31 March 2026"
   reporting_currency: INR
 
+# Facts are looked up in this accounting standard unless another is asked for (v1 = Ind AS).
+primary_accounting_standard: Ind AS
+
 # Periods are listed explicitly with real dates. Nothing is inferred from labels.
 # Quarter-label resolution (e.g. "Q2 FY26") arrives in M2 (periods.py).
 periods:
@@ -24,6 +27,15 @@ periods:
 
 # Source documents. `file_name` is what the facts CSV puts in `source_doc`.
 # local_path = data/raw/<file_name>. sha256 is read from sources_hashes.txt at load time.
+#
+# period_covered: the period this document is FOR. It is the primary source for facts of
+#   exactly that period; when it reprints another period (e.g. last year's comparatives),
+#   it is a cross-check, not the primary source.
+# Accounting standard, one of:
+#   accounting_standard: <std>          the whole document uses one standard
+#   accounting_standard_by_page:        PDF page index -> standard; pages not listed have no
+#     <std>: [pages]                    known standard and facts cannot cite them
+#   Allowed standards: Ind AS, IFRS. Facts are only compared within the same standard.
 sources:
   - file_name: tcs_annual_report_FY26.pdf
     doc_type: annual_report
@@ -32,6 +44,7 @@ sources:
     url: null
     published_date: null       # TO VERIFY: publication date not recorded (auditor's report is dated 9 April 2026)
     period_covered: FY26
+    accounting_standard: Ind AS  # the financial statements in the annual report are Ind AS
     retrieved_on: "2026-10-03" # TO VERIFY: taken from the PDF's file date on disk
     licence_note: null         # TO VERIFY
   - file_name: tcs_factsheet_Q1_FY27.pdf
@@ -41,6 +54,11 @@ sources:
     url: null
     published_date: "2026-07-09" # as printed on the cover
     period_covered: Q1 FY27
+    # From the page headings. Highlights/summary pages (4-12, 15, 19, 23) carry no stated
+    # standard and are left out on purpose (TO VERIFY which standard they follow).
+    accounting_standard_by_page:
+      IFRS: [14, 16, 17, 18, 20]   # IFRS income statement, cash flow, financial position (INR and USD)
+      Ind AS: [21, 22]             # Ind AS income statement and balance sheet, consolidated
     retrieved_on: "2026-10-03" # TO VERIFY: taken from the PDF's file date on disk
     licence_note: null         # TO VERIFY
 
@@ -53,6 +71,17 @@ sources:
 plausibility_bands:
   revenue_from_operations: {min: 100000, max: 600000}
   profit_after_tax:        {min: 15000,  max: 150000}
+  profit_attributable_to_owners: {min: 15000, max: 150000}
   eps_basic:               {min: 40,     max: 400}
   total_equity:            {min: 40000,  max: 400000}
   cash_and_equivalents:    {min: 1000,   max: 60000}
+
+# How finely each reported unit is printed in TCS documents, in that unit. Two figures for the
+# same fact (after converting to the canonical unit) "agree" if they differ by no more than
+# half of each one's printing step added together.
+# TO VERIFY (author): AR FY26 prints INR crore as whole numbers and EPS to 2 decimals; the Q1 FY27
+# fact sheet prints INR million as whole numbers. Check any new document against this.
+reporting_rounding:
+  INR_CRORE: 1
+  INR_MILLION: 1
+  INR_PER_SHARE: 0.01

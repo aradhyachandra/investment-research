@@ -13,10 +13,10 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel
 
-from erp.config import ConfigError
+from erp.config import REPO, ConfigError
 from erp.periods import prior_year_label
 from erp.tools.facts import FactResult, company_info, get_financial_fact
-from erp.version import REPO, code_version
+from erp.version import code_version
 
 RATIOS_CONFIG = REPO / "config" / "ratios.yaml"
 METRICS_CONFIG = REPO / "config" / "metrics.yaml"

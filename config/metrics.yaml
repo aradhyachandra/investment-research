@@ -1,5 +1,5 @@
 # Metric definitions -> seeded into the `metric` table.
-# Only the 5 metrics used by data/sample/facts_sample.csv are defined so far.
+# Only the metrics used by data/sample/facts_sample.csv are defined so far.
 # The full v1 list (PROJECT_PLAN.md Section 4.2) is added when the full dataset exists.
 #
 # Fields:
@@ -27,10 +27,21 @@ metrics:
     canonical_unit: INR_CRORE
     is_flow: 1
     definition: >-
-      "Profit for the year" as reported on the Statement of Profit and Loss, i.e.
-      after tax and INCLUDING the share attributable to non-controlling interests.
-      The sample fixture uses this line. It is NOT "Profit attributable to
-      shareholders of the Company", which is a different, smaller figure.
+      profit for the year, including non-controlling interests: the "Profit for the
+      year" line on the Statement of Profit and Loss, after tax and after exceptional
+      items. It is NOT "Profit attributable to shareholders of the Company" (see
+      profit_attributable_to_owners), which is smaller.
+
+  profit_attributable_to_owners:
+    display_name: Profit attributable to shareholders of the Company
+    statement: income
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    definition: >-
+      Profit for the year attributable to shareholders of the Company, i.e. after
+      non-controlling interests. Statutory (after exceptional items), as reported on
+      the Statement of Profit and Loss. Used for net margin and net profit growth.
 
   eps_basic:
     display_name: Basic EPS
