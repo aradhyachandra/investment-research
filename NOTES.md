@@ -2,6 +2,39 @@
 
 Open questions, TO VERIFY items, and validation TODOs. Newest first.
 
+## TO VERIFY / decide (from M3, 2026-10-04)
+
+- **Discounting convention**: year-end, whole years (DF_t = 1/(1+WACC)^t). Mid-year
+  (t - 0.5) is a common alternative; not implemented. Must match the hand spreadsheet.
+- **Stub period**: the valuation date is assumed to be the base fiscal year end. A valuation
+  date part-way through a year is not handled.
+- **Leases**: `lease_liabilities` is subtracted in the bridge. If leases are instead treated as
+  operating costs inside EBIT, set it to 0 and say so in the rationale. Decide with the finance
+  partner (plan 5.1: consistency between EBIT and the bridge).
+- **Terminal growth >= risk-free rate**: stored as a failed check but the run still completes.
+  Plan says "must be below"; confirm whether it should refuse.
+- **TV share warning band** 50%-85% (`config/dcf.yaml`) is a placeholder, not sourced.
+- **Negative EBIT** gives a tax credit in `EBIT x (1 - tax)`. Irrelevant for TCS; flag if used.
+- **Tax shield rate** is a separate assumption (`debt_tax_rate`), not the cash tax rate.
+- **Float tolerance**: WACC must exceed g by more than 1e-9.
+
+## DCF checks: done vs TODO (PROJECT_PLAN.md 5.3)
+
+Done in M3 (`src/erp/dcf/checks.py`, stored in `dcf_run.checks_json`):
+- required assumptions present (blocking); terminal growth < WACC (blocking);
+  terminal growth < risk-free rate (fail, not blocking); TV share of EV in band (warn)
+- every assumption has a non-empty rationale and source (loader refuses otherwise)
+
+TODO (need historical facts in SQLite; today only 5 metrics are loaded):
+- [ ] Historical growth, margins, tax rate, D&A %, capex %, NWC changes shown beside assumptions
+- [ ] Margin / growth jumps vs history flagged
+- [ ] Historical FCFF
+- [ ] Bridge items (cash, investments, debt, leases, minorities) and base-year revenue taken
+      from the latest balance-sheet / P&L facts, with fact_ids, instead of the YAML
+- [ ] All required facts present and from the same basis and period
+- [ ] Implied multiples (implied EV/EBITDA, implied P/E)
+- [ ] Golden test vs the hand spreadsheet (base within 0.1% + 2 more scenarios) after P0.3
+
 ## TO VERIFY / decide (from M2.1, 2026-10-04)
 
 - **Accounting standard as a schema column?** Today the standard is NOT stored in SQLite. It is

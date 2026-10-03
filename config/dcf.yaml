@@ -1,0 +1,16 @@
+# DCF engine settings (method, not assumptions). Company assumptions live in
+# data/manual/dcf_inputs.yaml (written by the author) -- never here.
+
+checks:
+  # Terminal value as a share of enterprise value. Outside this band the run is stored with a
+  # "warn" check (not refused). TO VERIFY with the finance partner: 50%-85% is a placeholder
+  # band chosen by Claude, not a sourced rule.
+  tv_share_of_ev_warning_band:
+    min: 0.50
+    max: 0.85
+
+sensitivity:
+  # The grid is built around the scenario's own WACC and terminal growth, adding these offsets
+  # (decimals: 0.01 = one percentage point). Cells where growth >= WACC are left blank.
+  wacc_offsets: [-0.01, -0.005, 0.0, 0.005, 0.01]
+  terminal_growth_offsets: [-0.01, -0.005, 0.0, 0.005, 0.01]

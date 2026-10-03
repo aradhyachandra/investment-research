@@ -24,3 +24,9 @@ def conversion_factor(reported_unit: str, canonical_unit: str) -> float:
         raise UnitError(
             f"no conversion from reported unit {reported_unit!r} to canonical unit {canonical_unit!r}"
         ) from None
+
+
+# DCF money and share-count units (M3). Value per share is always reported in INR per share:
+# per share = equity (in money unit) x MONEY_UNITS[money] / (shares x SHARE_UNITS[shares]).
+MONEY_UNITS = {"INR": 1, "INR_MILLION": 10**6, "INR_CRORE": 10**7}
+SHARE_UNITS = {"SHARES": 1, "SHARES_MILLION": 10**6, "SHARES_CRORE": 10**7}

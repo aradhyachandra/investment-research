@@ -1,5 +1,51 @@
 # PROGRESS
 
+## 2026-10-04 — M3: DCF engine, assumptions loader, checks, run_dcf
+
+**Done**
+- `src/erp/dcf/engine.py` (pure arithmetic, no LLM, no database, no market price):
+  `build_fcff` (FCFF from drivers, plan 5.1; other income excluded), `cost_of_equity`,
+  `compute_wacc` (all-equity is `debt_weight = 0`), `equity_bridge`, `value_firm` (discount
+  factors, PV per year, terminal value, PV of TV, EV, equity, per share, TV % of EV),
+  `sensitivity_grid` (WACC x terminal growth). Every function returns its intermediates.
+- `src/erp/dcf/assumptions.py`: reads the assumptions YAML (`shared` block + named scenarios,
+  scenario keys override shared). Refuses on a missing/blank rationale or source anywhere in
+  the file, naming the assumption and block; also on unknown names, rates written as percents
+  (12 instead of 0.12), wrong-length per-year lists, non-positive shares, horizon < 1.
+- `src/erp/dcf/checks.py`: required inputs present (blocking), terminal growth < WACC
+  (blocking), terminal growth < risk-free (stored fail, not blocking), TV share of EV inside a
+  warning band (stored warn).
+- `src/erp/dcf/run.py`: `run_dcf(conn, ticker, scenario, assumptions_path=...)` -> `DCFResult`
+  and one `dcf_run` row (full YAML text + sha256 + resolved assumptions; every intermediate;
+  checks; git SHA). A failed blocking check refuses and stores nothing.
+- `config/dcf.yaml`: TV warning band and sensitivity offsets (method settings, not assumptions).
+- `src/erp/units.py`: money units (INR, INR_MILLION, INR_CRORE) and share units for per-share.
+- Toy fixture `tests/fixtures/dcf_toy_assumptions.yaml` (clearly labelled NOT TCS), commented
+  as the format guide for the real file.
+- Tests: 252 passing (71 new). Toy case: 153.273278... per share, TV 80.97% of EV; every
+  intermediate checked against hand arithmetic cross-checked with `bc`.
+
+**Decisions**
+- Year-end discounting, whole years: DF_t = 1/(1+WACC)^t (TO VERIFY; mid-year not built).
+- Terminal value: Gordon growth on FCFF_n x (1 + g), valued at end of year n.
+- WACC must exceed g by more than 1e-9: in floating point 0.07 + 1.0 x 0.05 = 0.12000000000000001,
+  so g = 0.12 would otherwise pass and give a near-infinite TV (found by a test).
+- Final-year FCFF must be positive (Gordon growth on zero/negative FCFF is meaningless).
+- Rates are decimals in the YAML. Value per share is always INR per share.
+- Tax rate for the interest tax shield is its own assumption (`debt_tax_rate`).
+- Base-year revenue and bridge items come from the YAML (with sources), not SQLite, for now.
+- Assumptions YAML default path: `data/manual/dcf_inputs.yaml` (not created; author-owned).
+
+**Known issues / flags for the author**
+- Plan M3 acceptance = golden test vs the hand spreadsheet (P0.3). Not possible yet; only the
+  toy-case unit tests exist. M3 is "engine done, golden test pending".
+- TV warning band 50%-85% in `config/dcf.yaml` is a placeholder chosen by Claude (TO VERIFY).
+- Plan 5.3 items not built (need SQLite history): see NOTES.md TODO list.
+
+**Next**
+- M4: annual report PDF -> chunks with page numbers -> ChromaDB (not started).
+
+---
 ## 2026-10-04 — M2.1: net margin, duplicate-fact policy (housekeeping)
 
 **Done**
