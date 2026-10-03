@@ -255,3 +255,52 @@ def test_rejects_fact_citing_generated_sample(conn, ctx, good_row):
     # LLM-generated notes must never be the source of a number in SQLite.
     ctx.sources["tcs_annual_report_FY26.pdf"]["doc_type"] = "generated_sample"
     assert_rejected(conn, ctx, [good_row], "generated_sample")
+
+
+# ---------- optional verified_by / verified_on columns (M2) ----------
+
+def test_csv_without_verified_columns_loads_unverified(conn, ctx, good_row):
+    assert "verified_by" not in good_row  # the sample CSV has no such columns
+    load_one(conn, ctx, good_row)
+    assert conn.execute("SELECT verified_by, verified_on FROM fact").fetchone() == (None, None)
+
+
+def test_blank_verified_columns_stay_null(conn, ctx, good_row):
+    good_row["verified_by"] = "  "
+    good_row["verified_on"] = ""
+    load_one(conn, ctx, good_row)
+    assert conn.execute("SELECT verified_by, verified_on FROM fact").fetchone() == (None, None)
+
+
+def test_verified_columns_are_stored(conn, ctx, good_row):
+    good_row["verified_by"] = "Test Reviewer"
+    good_row["verified_on"] = "2026-10-04"
+    load_one(conn, ctx, good_row)
+    assert conn.execute("SELECT verified_by, verified_on FROM fact").fetchone() == (
+        "Test Reviewer", "2026-10-04")
+
+
+@pytest.mark.parametrize("verified_on", ["04/10/2026", "2026-13-01", "yesterday"])
+def test_rejects_bad_verified_on_date(conn, ctx, good_row, verified_on):
+    good_row["verified_by"] = "Test Reviewer"
+    good_row["verified_on"] = verified_on
+    assert_rejected(conn, ctx, [good_row], "verified_on")
+
+
+def test_rejects_verified_on_without_verified_by(conn, ctx, good_row):
+    good_row["verified_by"] = ""
+    good_row["verified_on"] = "2026-10-04"
+    assert_rejected(conn, ctx, [good_row], "verified_by")
+
+
+def test_rejects_verified_by_without_date(conn, ctx, good_row):
+    good_row["verified_by"] = "Test Reviewer"
+    good_row["verified_on"] = ""
+    assert_rejected(conn, ctx, [good_row], "verified_on")
+
+
+def test_rejects_verifier_same_as_enterer(conn, ctx, good_row):
+    # Verification means a second pair of eyes.
+    good_row["verified_by"] = good_row["entered_by"]
+    good_row["verified_on"] = "2026-10-04"
+    assert_rejected(conn, ctx, [good_row], "verified_by")

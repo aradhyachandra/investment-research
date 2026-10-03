@@ -1,0 +1,59 @@
+# Ratio definitions used by compute_ratio (src/erp/tools/ratios.py).
+# The code only knows the two `kind`s below; which metrics go where lives here.
+#
+# kind: quotient    value = numerator / denominator x multiplier   (both inputs, same period)
+#       fields: numerator, denominator (metric_ids), multiplier
+# kind: yoy_growth  value = (current - prior_year) / prior_year x multiplier
+#       fields: metric (metric_id), multiplier. prior_year = same period type one fiscal
+#       year earlier (FY26 -> FY25, Q2 FY27 -> Q2 FY26). Refuses a zero or negative base.
+#
+# Every ratio also has: display_name, formula_version (bump it when the definition
+# changes, so old computed_metric rows stay interpretable), unit, definition.
+
+ratios:
+  pat_margin:
+    display_name: PAT margin
+    kind: quotient
+    numerator: profit_after_tax
+    denominator: revenue_from_operations
+    multiplier: 100
+    unit: PERCENT
+    formula_version: pat_margin.v1
+    definition: >-
+      Profit for the year (profit_after_tax, INCLUDING non-controlling interests) divided by
+      revenue from operations (excluding other income), same period, as a percentage.
+      TO VERIFY (author): some analysts use profit attributable to shareholders instead.
+
+  revenue_growth_yoy:
+    display_name: Revenue growth (year on year)
+    kind: yoy_growth
+    metric: revenue_from_operations
+    multiplier: 100
+    unit: PERCENT
+    formula_version: revenue_growth_yoy.v1
+    definition: >-
+      Change in revenue from operations versus the same period one fiscal year earlier,
+      as a percentage of the earlier figure. Reported rupee figures, not constant currency.
+
+  pat_growth_yoy:
+    display_name: PAT growth (year on year)
+    kind: yoy_growth
+    metric: profit_after_tax
+    multiplier: 100
+    unit: PERCENT
+    formula_version: pat_growth_yoy.v1
+    definition: >-
+      Change in profit for the year (incl. non-controlling interests) versus the same period
+      one fiscal year earlier, as a percentage of the earlier figure.
+
+  eps_growth_yoy:
+    display_name: EPS growth (year on year)
+    kind: yoy_growth
+    metric: eps_basic
+    multiplier: 100
+    unit: PERCENT
+    formula_version: eps_growth_yoy.v1
+    definition: >-
+      Change in basic EPS versus the same period one fiscal year earlier, as a percentage of
+      the earlier figure. Uses EPS as reported; no adjustment for bonus issues or splits
+      (TO VERIFY if comparing years where the share count changed for that reason).

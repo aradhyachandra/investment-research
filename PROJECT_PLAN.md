@@ -96,7 +96,7 @@ Only about one month of Claude Pro is available, and it covers the coding tool, 
 **Sample-data labelling rules**
 - LLM-generated notes (e.g. Gemini summaries of the reports) are reading aids and test fixtures only. Keep them in `data/sample/generated/` with `doc_type = generated_sample`. They are excluded from the eval, from any real retrieval run, and from the public repo.
 - Retrieval tests index the real annual report PDF, not notes about it, so page citations stay real.
-- No LLM-generated number ever enters SQLite. Numbers are hand-typed from the filings.
+- Numbers read by an LLM may be loaded into SQLite only with `entry_method = llm_extracted` and `verified_by` empty. They do not count toward the eval, gold answers or any quoted result until the author verifies them (the author then fills `verified_by` and `verified_on`; an LLM never does).
 - The public report `data/manual/reports/tcs.md` is written by the author. A generated summary may help as a reading aid, but the final text and its page citations are the author's own.
 
 ---

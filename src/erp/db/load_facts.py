@@ -4,6 +4,12 @@ Steps: build schema -> seed reference tables from config (company, metric, perio
 source_document) -> validate every CSV row -> insert all facts in one transaction.
 If any row fails, nothing is written (all-or-nothing) and every problem is reported.
 
+Optional CSV columns verified_by / verified_on: filled by the author after checking a row
+against the PDF. Blank means unverified (stored as NULL).
+
+Optional CSV columns verified_by / verified_on: filled by the author after checking a row
+against the PDF. Blank means unverified (stored as NULL).
+
 Run from the repo root:
     PYTHONPATH=src python -m erp.db.load_facts --csv data/sample/facts_sample.csv \
         --entry-method llm_extracted --db data/db/sample.sqlite --replace
@@ -108,11 +114,11 @@ def load_rows(conn: sqlite3.Connection, rows: list[dict], ctx: LoadContext, entr
                 cur = conn.execute(
                     "INSERT INTO fact (company_id, metric_id, period_id, basis, value, unit, reported_value,"
                     " reported_unit, conversion_factor, source_id, source_page, source_page_label,"
-                    " entry_method, entered_by, verified_by)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)",
+                    " entry_method, entered_by, verified_by, verified_on)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (company_id, f.metric_id, period_id, f.basis, f.value, f.unit, f.reported_value,
                      f.reported_unit, f.conversion_factor, source_id, f.source_page, f.source_page_label,
-                     entry_method, f.entered_by),
+                     entry_method, f.entered_by, f.verified_by, f.verified_on),
                 )
                 fact_ids.append(cur.lastrowid)
     except sqlite3.IntegrityError as e:  # backstop; the checks above should catch these first

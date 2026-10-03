@@ -9,6 +9,7 @@ Two steps:
 """
 import math
 from dataclasses import dataclass
+from datetime import date
 
 from erp.config import LoadContext
 from erp.units import UnitError, conversion_factor
@@ -18,6 +19,8 @@ CSV_COLUMNS = (
     "ticker", "metric_id", "period", "basis", "reported_value", "reported_unit",
     "source_doc", "source_page", "source_page_label", "entered_by",
 )
+# Optional: the author fills these after checking a row against the PDF. Blank = not verified.
+OPTIONAL_COLUMNS = ("verified_by", "verified_on")
 
 
 @dataclass(frozen=True)
@@ -36,6 +39,8 @@ class Fact:
     source_page: int
     source_page_label: str | None
     entered_by: str
+    verified_by: str | None = None
+    verified_on: str | None = None     # ISO date
 
     def key(self):
         """Same fields as the fact table's UNIQUE constraint."""
@@ -55,6 +60,23 @@ def _parse_number(text: str):
     except ValueError:
         return None
     return number if math.isfinite(number) else None
+
+
+def _check_verification(verified_by: str, verified_on: str, entered_by: str) -> list[str]:
+    """Both blank (unverified) or both filled, by someone other than the person who entered it."""
+    errors = []
+    if verified_on:
+        try:
+            date.fromisoformat(verified_on)
+        except ValueError:
+            errors.append(f"verified_on {verified_on!r} is not an ISO date (YYYY-MM-DD)")
+        if not verified_by:
+            errors.append("verified_on is set but verified_by is empty")
+    elif verified_by:
+        errors.append("verified_by is set but verified_on is empty")
+    if verified_by and verified_by.casefold() == entered_by.casefold():
+        errors.append("verified_by must be a different person from entered_by")
+    return errors
 
 
 def check_fact(fact: Fact, ctx: LoadContext) -> list[str]:
@@ -99,6 +121,7 @@ def validate_row(row: dict, row_number: int, ctx: LoadContext) -> tuple[Fact | N
         errors.append(f"source_doc {get('source_doc')!r} is generated_sample; generated notes never supply numbers")
     if not get("entered_by"):
         errors.append("entered_by is empty")
+    errors += _check_verification(get("verified_by"), get("verified_on"), get("entered_by"))
 
     reported_value = _parse_number(row.get("reported_value"))
     if reported_value is None:
@@ -133,6 +156,8 @@ def validate_row(row: dict, row_number: int, ctx: LoadContext) -> tuple[Fact | N
         source_page=page,
         source_page_label=get("source_page_label") or None,
         entered_by=get("entered_by"),
+        verified_by=get("verified_by") or None,
+        verified_on=get("verified_on") or None,
     )
     return fact, check_fact(fact, ctx)
 

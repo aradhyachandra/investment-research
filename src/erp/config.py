@@ -10,6 +10,8 @@ from pathlib import Path
 
 import yaml
 
+from erp.periods import PeriodError, resolve_period
+
 METRIC_FIELDS = ("display_name", "statement", "unit_kind", "canonical_unit", "is_flow", "definition")
 
 
@@ -50,7 +52,8 @@ def _sha256_of(path: Path) -> str:
     return h.hexdigest()
 
 
-def _check_periods(periods: list) -> dict:
+def _check_periods(periods: list, fiscal_year_end_month: int) -> dict:
+    """Each configured period must match what the period resolver says its label means."""
     by_label = {}
     for p in periods:
         try:
@@ -62,6 +65,17 @@ def _check_periods(periods: list) -> dict:
             raise ConfigError(f"period {p['label']!r}: start_date must be before end_date")
         if p["label"] in by_label:
             raise ConfigError(f"period {p['label']!r} listed twice")
+        try:
+            expected = resolve_period(p["label"], fiscal_year_end_month)
+        except PeriodError as e:
+            raise ConfigError(f"period {p['label']!r}: {e}") from None
+        actual = (p.get("period_type"), p.get("fiscal_year"), start, end)
+        wanted = (expected.period_type, expected.fiscal_year, expected.start_date, expected.end_date)
+        if actual != wanted:
+            raise ConfigError(
+                f"period {p['label']!r}: config has type/year/dates {actual}, "
+                f"but the label means {wanted}"
+            )
         by_label[p["label"]] = p
     return by_label
 
@@ -101,7 +115,7 @@ def load_context(company_config, metrics_config, hashes_file, raw_dir=None) -> L
     return LoadContext(
         company=cfg["company"],
         metrics=metrics,
-        periods=_check_periods(cfg["periods"]),
+        periods=_check_periods(cfg["periods"], cfg["company"]["fiscal_year_end_month"]),
         sources=sources,
         bands=bands,
     )
