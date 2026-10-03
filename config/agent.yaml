@@ -1,0 +1,64 @@
+# Agent settings (M5): the runtime LLM, the two-step router and the answer composer.
+# Method settings, not company facts. Company-specific lists (metrics, ratios, periods,
+# DCF scenarios) are read from their own config files and the database, never typed here.
+
+llm:
+  # The one runtime LLM. Called only through erp.agent.llm.call_llm.
+  # Chosen in the P0.6 model test (2026-10-04), see NOTES.md. Swap here to compare models.
+  model: qwen2.5:3b
+  ollama_url: http://localhost:11434
+  temperature: 0           # plan 8.11: evals run at temperature 0
+  seed: 0
+  num_ctx: 8192            # context window asked of Ollama; the composer prompt is ~2-4k tokens
+  timeout_seconds: 300     # first call loads the model; a fanless M2 Air can be slow
+  keep_alive: 5m
+
+# v1 answers questions about one company. The router never chooses the ticker.
+default_ticker: TCS
+
+router:
+  max_tool_calls: 4        # a mixed question may need e.g. two ratios + a document search
+
+tools:
+  search_top_k: 5          # chunks returned by search_documents per call
+  passage_chars: 900       # chunk text shown to the composer is cut to this length
+  # Real assumptions file (author-owned, P0.3). If it does not exist, run_dcf answers
+  # "assumptions not available" instead of guessing.
+  dcf_assumptions: data/manual/dcf_inputs.yaml
+
+# How code formats a number before the LLM sees it. The LLM copies these strings; it never
+# rounds or converts. TO VERIFY (author): international digit grouping (267,021) is used, not
+# Indian grouping (2,67,021) as printed in TCS filings.
+display:
+  decimals:
+    INR: 0
+    INR_MILLION: 0
+    INR_CRORE: 0
+    INR_PER_SHARE: 2
+    PERCENT: 2
+    SHARES_CRORE: 2
+  templates:
+    INR: "INR {v}"
+    INR_MILLION: "INR {v} million"
+    INR_CRORE: "INR {v} crore"
+    INR_PER_SHARE: "INR {v} per share"
+    PERCENT: "{v}%"
+    SHARES_CRORE: "{v} crore shares"
+
+# Phrases that must never appear in an answer (CLAUDE.md, plan 7 risk 9). If the composed text
+# contains one, it is thrown away and the code-written template answer is used instead.
+# Matched as whole words, case-insensitive. This is a guard list, not prompt text.
+# Left out on purpose: "fair value" and "recommend(ed)" (normal accounting / Board wording, e.g.
+# "the Board recommended a final dividend"). Whole-word matching still trips on e.g. "cross-sell";
+# the template fallback is the safe cost of that. TO VERIFY: a fuller check belongs to the M6 verifier.
+banned_phrases:
+  - buy
+  - sell
+  - hold
+  - target price
+  - price target
+  - undervalued
+  - overvalued
+  - outperform
+  - underperform
+  - accumulate

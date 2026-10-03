@@ -1,5 +1,91 @@
 # PROGRESS
 
+## 2026-10-04 — M5: tool layer, two-step router (v1), structured Answer; P0.6 model test
+
+**Done**
+- P0.6 model test (`tests/run_p06_model_test.py` + routing runs): llama3.2, qwen2.5:3b, phi4-mini
+  (the last two pulled with the author's OK). **Chosen: qwen2.5:3b** (NOTES.md has the tables).
+- `config/agent.yaml`: runtime model and Ollama settings, router/tool settings, number display
+  formats, advice-language guard list.
+- `src/erp/agent/llm.py`: `call_llm`, the one runtime LLM function (Ollama `/api/chat`, model
+  from config, temperature 0, seed 0, optional JSON-schema `format`). No API key.
+- `src/erp/agent/tools.py`: the four tools behind one interface, `run_tool(ToolCall, ToolEnv) ->
+  ToolResult`. Typed inputs (`FactArgs`, `RatioArgs`, `DCFArgs`, `SearchArgs`); every result has
+  `numbers` (value, unit, period, basis, code-formatted display, evidence_id), `evidence`
+  (evidence_id, kind, source, page, printed page, period, basis, standard, verified, formula,
+  input ids), `passages`, `notes`, `error`. Evidence ids: `fact:<id>`, `calc:<id>`, `dcf:<run_id>`,
+  `chunk:<chunk_id>`. Expected tool errors become `ok=False` results; anything else raises.
+- `src/erp/agent/router.py`: Router v1 step 1. Menus (metrics, ratios, periods with data, DCF
+  scenario names, tools) come from config/DB and are enums in the JSON schema. `calls` first in
+  the schema; worked examples in the prompt (filtered to ids the company has). Out-of-scope or a
+  refusal reason -> refuse, no tools. Unreadable reply -> `routing_failed`, never a guess.
+- `src/erp/agent/loop.py`: `answer_question(question, env, llm_fn)`: route -> tools in code ->
+  compose (LLM picks used number ids / cited ids from enums) -> `Answer`. Fixed refusal texts;
+  template answer (code-written) if the composer reply is unusable or has advice/verdict words;
+  refusal "data_not_available" if every tool failed. CLI: `python -m erp.agent.loop "question"`.
+- `src/erp/agent/answer_schema.py`: `Answer` (answer_text, numbers_used, citations, refused,
+  refusal_reason, limitations, route, tool_results, composed_by, model, warnings, disclaimer).
+- `src/erp/agent/route_score.py`: routing accuracy as its own metric (tools right / tools and
+  arguments right / refusal reason), reported as counts.
+- PROVISIONAL dev questions: `tests/provisional_dev_questions.jsonl` (20, Claude-written, expected
+  route only, 10 marked `e2e`). Live runner: `tests/run_provisional_dev.py`.
+- Tests: 386 passing (73 new): tool layer, router parsing/schema/prompt, route scoring, loop
+  (refusals, failures, dropped ids, advice guard, template fallback), M5 acceptance (10 questions
+  end to end with a scripted LLM; routing 20 of 20 with the gold route).
+- Local `data/db/sample.sqlite` rebuilt with `load_facts --replace` (it predated the two
+  `profit_attributable_to_owners` rows; source ids unchanged, Chroma still matches).
+
+**M5 acceptance (plan Section 9)**
+- Deterministic: 10 of 10 PROVISIONAL e2e questions answered (or correctly refused) with every
+  number pointing at a citation that carries source, page, period and basis (DCF on the TOY
+  fixture renamed to TCS inside the test only).
+- Live, qwen2.5:3b, real DB + Chroma, all 20 questions (~166 s): 15 answered, every number pointing
+  at a filled citation; 3 guardrail refusals correct; 2 DCF questions answered "assumptions file
+  does not exist yet". Of the 10 e2e: 8 answered, 1 correct refusal, 1 DCF "not available".
+- Routing accuracy (tools and arguments right): 16 of 20 live without a DCF file (misses: 2 DCF
+  scenario names it had to guess, PDEV-06 added an extra search, PDEV-17 skipped the FY25 ratio);
+  20 of 20 when scenario names are available. PROVISIONAL questions, prompt tuned on them.
+
+**Decisions**
+- Router v1 (two-step) is the only router built. Free-form tool calling (v0) was compared only in
+  the P0.6 toy test. The plan's M5 row says "Router v0", Section 3.3 says build v1 first on 8 GB;
+  followed 3.3 as asked.
+- There was no existing runtime LLM function (only `embed_texts` for embeddings), so `call_llm`
+  was created as the one function.
+- The ticker is never chosen by the LLM (`default_ticker` in config).
+- Search queries are free text; the router does not set search filters (doc_type, fiscal year).
+- Numbers shown to the LLM are formatted by code; raw values never appear in the prompt.
+- `numbers_used` = number ids the composer lists (unknown ids dropped); if none listed, all tool
+  numbers attached with a warning. Citations = evidence of those numbers + calc inputs + cited
+  chunks (all passages if none cited, with a warning).
+- Refusal texts are fixed in code. The advice-language guard is a whole-word list in config.
+- The plan's Answer schema (8.3) has `claims[]`; M5 uses `numbers_used` + `citations` as asked.
+  `data_as_of` is not filled yet.
+
+**Known issues / flags for the author**
+- `eval/questions.jsonl` (P0.4) does not exist, so all questions are PROVISIONAL (tests/ only).
+- `data/manual/dcf_inputs.yaml` (P0.3) does not exist, so live DCF questions answer "not
+  available". The agent never reads the DRAFT file (Claude only looked at its header while exploring).
+- Unsupported comparison seen live (PDEV-17, "net margin decreased" with no FY25 figure): M6.
+- No check yet that numbers written in `answer_text` match tool numbers (verifier, M6).
+- Unit-conversion questions ("in INR million") and pure period questions have no tool; the
+  composer is told not to convert. Consider small `convert_units` / `resolve_period` tools.
+- Retrieval misses (capital allocation, client concentration) carry over from M4.
+- qwen2.5:3b licence TO VERIFY (see NOTES.md).
+
+**Next**
+- M6: verifier (numeric grounding, citation existence) + refusal handling (not started).
+
+**How to run**
+```
+PYTHONPATH=src .venv/bin/python -m erp.agent.loop "What was TCS's net margin in FY26?"
+PYTHONPATH=src:tests .venv/bin/python tests/run_provisional_dev.py --e2e-only
+PYTHONPATH=src:tests .venv/bin/python tests/run_provisional_dev.py --route-only --model qwen2.5:3b --model llama3.2
+PYTHONPATH=src .venv/bin/python tests/run_p06_model_test.py qwen2.5:3b phi4-mini llama3.2
+```
+
+---
+
 ## 2026-10-04 — M4: annual report PDF -> chunks -> ChromaDB; search_documents
 
 **Done**

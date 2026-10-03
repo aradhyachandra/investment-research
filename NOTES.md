@@ -2,6 +2,73 @@
 
 Open questions, TO VERIFY items, and validation TODOs. Newest first.
 
+## P0.6 model test (2026-10-04): runtime LLM = qwen2.5:3b
+
+Hardware: MacBook Air M2, 8 GB RAM. Ollama 0.34.2. All models at temperature 0, seed 0, num_ctx 8192.
+Pulled for the test (with the author's OK): qwen2.5:3b (1.9 GB), phi4-mini (3.8B, 2.5 GB);
+llama3.2 (3B) was already installed. No 7-8B model tried (RAM; not asked for this session).
+
+**1. Toy test** (`tests/run_p06_model_test.py`, 5 prompts about a made-up "ACME", correct out of 5):
+
+| model | memory loaded | JSON via schema | JSON by prompt only | native tool calling |
+|---|---|---|---|---|
+| qwen2.5:3b | 2.3 GB | 2 | 2 (1 schema-valid) | 5 |
+| llama3.2 | 3.0 GB | 4 | 5 | 4 (invented a `share_price` metric) |
+| phi4-mini | 3.6 GB | 3 | 0 (no valid JSON) | 1 |
+
+The toy schema put `refuse` first; qwen then refused 3 plain lookups. That pointed at the fix below.
+
+**2. Routing on the 20 PROVISIONAL dev questions** (`tests/run_provisional_dev.py --route-only`,
+real router prompt and schema; "right" = tools and arguments):
+
+| router version | qwen2.5:3b | llama3.2 | phi4-mini |
+|---|---|---|---|
+| first prompt, type-first schema | 5 of 20 | 4 of 20 | not run |
+| + worked examples, `calls` first in schema, no DCF scenarios known | 16 of 20 | 16 of 20 | 16 of 20 |
+| same, DCF scenario names available (base/bear) | **20 of 20** | 17 of 20 | 17 of 20 |
+| total time, 20 questions (last row) | 40 s | 40 s | 53 s |
+
+**Chosen: qwen2.5:3b.** Best routing in both conditions, no wrong refusals of normal questions,
+all three guardrail questions refused, smallest memory use and fastest. llama3.2 answered the
+Infosys comparison with a TCS lookup instead of refusing (a guardrail failure); phi4-mini refused
+a plain qualitative question as "investment advice" and is the heaviest.
+**Caveats (important):** 20 questions written by Claude, not the author's eval; the prompt was
+tuned on these same questions; results move with small prompt changes (adding one DCF example
+changed qwen from 16 to 20 of 20, mostly on unrelated questions). Re-run on the author's dev split
+(P0.4) before trusting any of this. TO VERIFY: qwen2.5:3b licence (the 3B size is, as far as
+Claude knows, under the "Qwen Research License", not Apache 2.0 like most Qwen2.5 sizes; fine for
+local personal use, check before any other use).
+
+**Free-form tool calling (Router v0)** was compared only in the toy test (column "native"). It is not
+built: the two-step router (v1) is the default, as the plan expects on 8 GB.
+
+## TO VERIFY / decide (from M5, 2026-10-04)
+
+- **Ollama structured outputs.** The schema is passed as `format`. Ollama turns it into a grammar.
+  Found: an empty `enum` is rejected with HTTP 400 (fixed: empty list -> `maxItems: 0`). TO VERIFY
+  which other JSON-schema keywords are silently ignored; the code re-validates everything anyway.
+- **Field order matters.** Ollama generates fields in schema order. `calls` first, then
+  `question_type`, `refusal_reason`. Type-first made all three models label plain lookups out of scope.
+- **No DCF assumptions file -> scenario names unknown.** The model then invents one (`base_case`)
+  and run_dcf answers "assumptions file does not exist yet". Correct outcome, but routing scores
+  for DCF questions are only meaningful once `data/manual/dcf_inputs.yaml` exists.
+- **Unsupported comparison (seen live, PDEV-17).** The router asked for FY26 net margin only; the
+  composer still wrote "net margin decreased from FY25 to FY26" with no FY25 figure. No number was
+  invented, but the claim is unsupported. The M6 verifier checks numbers; it should also catch
+  comparative words ("increased", "decreased", "higher") without both figures. Not built (M6).
+- **Dates in prose.** Period dates reach the composer as text ("2024-04-01 to 2025-03-31") and the
+  model rewrites them ("April 1, 2024"). The M6 verifier must treat dates as a separate case.
+- **Advice-language guard** (`config/agent.yaml` `banned_phrases`) is a whole-word list. It can trip
+  on harmless words ("cross-sell", "hold" as in "hold talks"); the cost is a template answer. "fair
+  value" and "recommend" are left out on purpose (normal accounting/Board wording).
+- **Digit grouping.** Display uses international grouping (267,021) while TCS prints Indian
+  grouping (2,67,021). Author to decide; the M6 verifier must accept the form the display uses.
+- **Retrieval misses seen live:** "returning surplus cash to shareholders" retrieved a goodwill note;
+  "single customer 10% of revenue" missed PDF 226/293 (same as M4 probe PROV-05). The composer said
+  "not available" both times rather than inventing. Retrieval quality is an M4 follow-up.
+- **numbers_used comes from the ids the LLM lists.** If it lists none, all tool numbers are attached
+  (with a warning). This is a bookkeeping rule, not a check that the text uses them (that is M6).
+
 ## TO VERIFY / decide (from M4, 2026-10-04)
 
 **PDF extraction quality (FY26 annual report, PyMuPDF 1.28.2)**

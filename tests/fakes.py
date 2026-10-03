@@ -32,3 +32,17 @@ class CountingEmbedder:
         self.calls += 1
         self.texts += len(texts)
         return fake_embed(texts, purpose)
+
+
+class ScriptedLLM:
+    """Stands in for erp.agent.llm.call_llm. `reply(messages, schema)` returns the text the
+    'model' says; every call is recorded so tests can inspect prompts and schemas."""
+
+    def __init__(self, reply):
+        self.reply = reply
+        self.calls = []
+
+    def __call__(self, messages, *, schema=None, tools=None, model=None, cfg=None):
+        from erp.agent.llm import LLMReply
+        self.calls.append({"messages": messages, "schema": schema})
+        return LLMReply(text=self.reply(messages, schema), model="scripted-fake", seconds=0.0)
