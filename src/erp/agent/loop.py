@@ -109,6 +109,8 @@ def template_answer(results: list[ToolResult], failures: list[str]) -> str:
     """Code-written answer from the tool results: used when the LLM's text cannot be used."""
     lines = []
     for r in results:
+        if r.tool == "explain_period":          # period dates written by code (tools.py)
+            lines += [f"{x} [{r.evidence[0].evidence_id}]" for x in r.notes]
         lines += [f"{n.label}: {n.display} [{n.evidence_id}]." for n in r.numbers]
         for p in r.passages[:3]:
             ev = next(e for e in r.evidence if e.evidence_id == p.evidence_id)
@@ -165,7 +167,7 @@ def answer_question(question: str, env: ToolEnv, llm_fn=call_llm, *, cfg: dict |
     # 0. refusal pre-check: fixed patterns and a future-period check, no LLM (guardrails.py)
     reason = precheck(question, cfg["guardrails"], other_company_names(env.ticker),
                       latest_period(env.conn, env.ticker))
-    if reason:
+    if reason and reason != "outside_data":
         plan = RoutePlan(question_type="out_of_scope", refusal_reason=reason, refuse=True,
                          problems=["refused by the pattern pre-check (guardrails.py); the router was not called"])
         return _refusal(question, env, plan, reason, REFUSAL_TEXT[reason])
@@ -174,6 +176,13 @@ def answer_question(question: str, env: ToolEnv, llm_fn=call_llm, *, cfg: dict |
 
     # 1. route
     plan: RoutePlan = route(question, catalog, llm_fn, max_calls=cfg["router"]["max_tool_calls"])
+    if reason == "outside_data" and not (plan.calls and all(c.tool == "explain_period" for c in plan.calls)):
+        # A period after the latest data is a forecast, whatever the router chose; only a question
+        # about what that period means (explain_period alone, no figures) goes ahead.
+        refused = RoutePlan(question_type="out_of_scope", refusal_reason=reason, refuse=True, raw=plan.raw,
+                            model=plan.model, problems=["refused by the pre-check (guardrails.py): a period after "
+                                                        "the latest data, and the route was not explain_period only"])
+        return _refusal(question, env, refused, reason, REFUSAL_TEXT[reason], model=plan.model)
     if plan.question_type == "routing_failed":
         return _refusal(question, env, plan, "routing_failed", REFUSAL_TEXT["routing_failed"],
                         limitations=plan.problems, model=plan.model)
@@ -195,6 +204,8 @@ def answer_question(question: str, env: ToolEnv, llm_fn=call_llm, *, cfg: dict |
     warnings = []
     all_numbers = {n.number_id: n for r in ok for n in r.numbers}
     chunk_ids = [p.evidence_id for r in ok for p in r.passages]
+    # A period explanation backs the whole answer, so its evidence is always cited.
+    period_ids = [e.evidence_id for r in ok if r.tool == "explain_period" for e in r.evidence]
     model = plan.model
     try:
         reply = llm_fn(compose_messages(question, catalog.company_name, ok, failures), schema=compose_schema(ok))
@@ -211,7 +222,7 @@ def answer_question(question: str, env: ToolEnv, llm_fn=call_llm, *, cfg: dict |
         return Answer(question=question, ticker=env.ticker,
                       answer_text=_with_dcf_footer(template_answer(ok, failures), ok, cfg),
                       numbers_used=list(all_numbers.values()),
-                      citations=_cite(ok, [n.evidence_id for n in all_numbers.values()] + chunk_ids),
+                      citations=_cite(ok, period_ids + [n.evidence_id for n in all_numbers.values()] + chunk_ids),
                       refused=False, route=plan, tool_results=results, limitations=limitations,
                       composed_by="template", model=model, warnings=warnings, verification=report,
                       rejected_text=text or None)
@@ -242,7 +253,7 @@ def answer_question(question: str, env: ToolEnv, llm_fn=call_llm, *, cfg: dict |
     if chunk_ids and not cited_chunks:
         warnings.append("composer cited no passage; all passages it was given are attached")
         cited_chunks = chunk_ids
-    citations = _cite(ok, [n.evidence_id for n in numbers_used]
+    citations = _cite(ok, period_ids + [n.evidence_id for n in numbers_used]
                       + [i for i in cited if i in known_evidence and i not in chunk_ids] + cited_chunks)
     return Answer(question=question, ticker=env.ticker, answer_text=_with_dcf_footer(text, ok, cfg),
                   numbers_used=numbers_used, citations=citations, refused=False, route=plan, tool_results=results,

@@ -1,5 +1,71 @@
 # PROGRESS
 
+## 2026-10-04 — M7.1: fixes for M7 dev-split failures (bug-fix session, not M8)
+
+**Done** (tests first; regression tests use new phrasings only, `tests/test_dev_failure_fixes.py`)
+1. Router over-refusal (EV-B03, EV-E04 causes). Structural causes: (a) no tool for period questions;
+   (b) the prompt treated "not a SQLite metric" as "not in the data", and the metric enum forced a
+   substitute metric (lease interest -> cash_and_equivalents) before the model refused.
+   - New deterministic tool `explain_period` (`tools.py`): dates from the period resolver +
+     `fiscal_year_end_month` in the company config; evidence `period:<label>` (kind `config`).
+   - Router (`router.py`): `not_listed` metric choice -> `search_documents` with the user's question;
+     code overrides an outside_data/investment_advice/price_prediction refusal that comes with a
+     `not_listed` call; periods named in the question join the period enum; code refuses when every
+     fact/ratio call is for a period with no data; code adds a year the question names but the
+     router left out (PDEV-17-type miss). Prompt: tool description, reworded refusal rule, one
+     period example.
+   - Loop (`loop.py`): the pre-check's future-period refusal now refuses unless the route is
+     `explain_period` only; period evidence always cited; template answer carries the period notes.
+2. Verifier false rejection (EV-F01): confirmed a real false rejection from the saved run. "X …
+   higher/lower than Y" with a figure on each side is now an ordering of the two written figures (same
+   unit kind), not a direction-of-change claim. Saved F01 text re-verified: passes in all 4 saved
+   runs. The old logic also let a FALSE ordering pass ("4.58% … higher than 10%"); now caught.
+3. Retrieval (EV-E03), time-boxed: split table runs from prose at ingest. recall@5 on the 12
+   provisional probes 9 -> 9, recall@10 11 -> 11 (scratch indexes, switch off/on); PROV-11 rank
+   7 -> 9. **Reverted.** Learned: note sub-headings are body-size bold and not detected, so the
+   customer sentence shares a chunk with unrelated notes (NOTES.md).
+4. EV-G05 left alone.
+- Tests: 578 passing (33 new). Changed existing tests: `test_answer_loop.py` (FY22 lookup is now
+  refused by code before any tool; test uses FY25 growth to make a tool fail);
+  `test_m6_acceptance.py` (question names only FY26 so the injected FY25 comparison stays
+  unsupported). `tests/provisional_dev_questions.jsonl`: PDEV-06 expected route gained
+  `explain_period` (it asks which dates FY25 covers).
+- Live checks (qwen2.5:3b): my dev phrasings 12 of 12 as intended (before: 4 period questions
+  refused, 3 of 4 non-metric figures refused or substituted); held-out phrasings (written before
+  any change) 7 of 8 (miss: "tax expense" -> profit_after_tax substitution; this set also exposed
+  the pre-check future-period refusal, which was then fixed, so it is no longer clean);
+  provisional routing 20 of 20; guardrail phrasings 12 of 13 (unchanged, same known miss).
+
+**Dev run** (once, `eval/results/dev/20261004-155610_6788b014`, git 6788b01-dirty: the fixes
+are uncommitted, as asked). Before = M7 run `20261004-143418_9da27e58` (9da27e5-dirty).
+
+| Metric (full system) | before | after |
+|---|---|---|
+| Numeric accuracy | 10 of 14 | 10 of 14 |
+| Behaviour correct | 16 of 20 | 18 of 20 |
+| Over-refusal | 3 of 17 | 1 of 17 |
+| Routing: right tools / and period | 17 of 18 / 16 of 18 | 18 of 18 / 17 of 18 |
+| Refusal correctness (G) | 2 of 3 | 2 of 3 |
+| Verifier rejections | 2 of 16 | 1 of 18 |
+| Unsupported numeric claims | 0 of 34 | 0 of 25 |
+| Numeric claims citing a gold page (all / gold-matching) | 21 of 29 / 8 of 8 | 17 of 20 / 9 of 9 |
+| Advice words | 0 of 20 | 0 of 20 |
+
+Failures now (full): numeric EV-B02, EV-B06 (known: no conversion tool), EV-E02 (dividends,
+unchanged), EV-E04 (routed to search now, but retrieval misses PDF 200 -> "not available");
+behaviour EV-E04, EV-G05 (left alone); routing EV-C05 (model adds an FY25 growth call, as before).
+EV-E03 passing is luck (different router query found the standalone note PDF 293), not a fix.
+
+**Known issues / flags for the author**
+- Metric substitution is not guarded in code ("tax expense" -> profit_after_tax, held-out).
+- E04 is now a retrieval problem (searching with the full question misses the lease note).
+- Verifier does not read figures glued to a garbled ₹ ("H1,761 crore"), seen live.
+- Router prompt is fragile with qwen2.5:3b (measured again; see NOTES.md). Prefer code checks.
+- Eval routing rule for B period questions still expects `get_financial_fact` (unscored).
+
+**Next**
+- Author reviews this pass and commits (nothing committed). Then M8 (not started).
+
 ## 2026-10-04 — M7: eval harness, naive-RAG baseline, verifier ablation
 
 **Done**

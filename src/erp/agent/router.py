@@ -5,7 +5,12 @@ and are put into the JSON schema as enums, so a small model can only choose, not
 The plan's Router v0 (free-form tool calling) is not built; P0.6 compared it (NOTES.md).
 
 Output: a RoutePlan. A question is refused (no tools run) when the model says it is out of
-scope or gives a refusal reason. A reply that cannot be read is a routing failure, never a guess.
+scope or gives a refusal reason, or (decided by code) when every call it chose is a fact/ratio
+lookup for a period with no data. A reply that cannot be read is a routing failure, never a guess.
+
+Periods named in the question (read by code) are added to the allowed period values, so a
+question about a period with no data (e.g. "what dates does Q3 FY24 cover?") can still reach
+explain_period instead of being forced into a refusal.
 """
 import json
 import sqlite3
@@ -16,13 +21,18 @@ import yaml
 from pydantic import BaseModel
 
 from erp.agent.tools import ARGS_MODELS, TOOL_NAMES, ToolCall
+from erp.agent.verifier import periods_in
 from erp.ingest.pdf_to_chunks import load_ingest_config
 from erp.tools.ratios import load_ratios
 
-QUESTION_TYPES = ["numeric", "ratio", "valuation", "qualitative", "mixed", "out_of_scope"]
+QUESTION_TYPES = ["numeric", "ratio", "valuation", "qualitative", "period", "mixed", "out_of_scope"]
 REFUSAL_REASONS = ["none", "investment_advice", "price_prediction", "other_company", "outside_data"]
 # The flat call shape the model fills in. Each tool keeps only its own fields (ARGS_MODELS).
 CALL_FIELDS = ["metric_id", "ratio_id", "period", "basis", "scenario", "include_sensitivity", "query"]
+# metric_id choice for "the figure asked about is not in the list". Without it, a model that has
+# already chosen get_financial_fact must pick some listed metric (seen live: lease interest ->
+# cash_and_equivalents) and then refuses. Code turns it into a search of the filings.
+NOT_LISTED = "not_listed"
 
 
 class RoutingError(ValueError):
@@ -40,7 +50,7 @@ class Catalog(BaseModel):
 
 
 class RoutePlan(BaseModel):
-    question_type: Literal["numeric", "ratio", "valuation", "qualitative", "mixed", "out_of_scope",
+    question_type: Literal["numeric", "ratio", "valuation", "qualitative", "period", "mixed", "out_of_scope",
                            "routing_failed"]
     refusal_reason: str = "none"
     calls: list[ToolCall] = []
@@ -67,16 +77,17 @@ def build_catalog(conn: sqlite3.Connection, ticker: str, dcf_assumptions: Path) 
                    scenarios=scenarios, doc_types=load_ingest_config()["indexable_doc_types"])
 
 
-def route_schema(catalog: Catalog, max_calls: int) -> dict:
+def route_schema(catalog: Catalog, max_calls: int, extra_periods: list[str] = ()) -> dict:
+    """extra_periods: valid period labels named in the question but without data (for explain_period)."""
     def optional(values):
         return {"enum": [*values, None]}
     call = {
         "type": "object",
         "properties": {
             "tool": {"enum": list(TOOL_NAMES)},
-            "metric_id": optional(catalog.metrics),
+            "metric_id": optional([*catalog.metrics, NOT_LISTED]),
             "ratio_id": optional(catalog.ratios),
-            "period": optional(catalog.periods),
+            "period": optional([*catalog.periods, *[p for p in extra_periods if p not in catalog.periods]]),
             "basis": optional(["consolidated", "standalone"]),
             "scenario": optional(catalog.scenarios) if catalog.scenarios else {"type": ["string", "null"]},
             "include_sensitivity": {"type": ["boolean", "null"]},
@@ -112,6 +123,9 @@ _EXAMPLES = [
                  "basis": "consolidated"}], "question_type": "ratio", "refusal_reason": "none"}),
     ("What does the annual report say about employee attrition?",
      {"calls": [{"tool": "search_documents", "query": "employee attrition"}], "question_type": "qualitative",
+      "refusal_reason": "none"}),
+    ("Which dates does {last} run between?",
+     {"calls": [{"tool": "explain_period", "period": "{last}"}], "question_type": "period",
       "refusal_reason": "none"}),
     ("What was revenue in FY19?",
      {"calls": [], "question_type": "out_of_scope", "refusal_reason": "outside_data"}),
@@ -151,12 +165,16 @@ TOOLS
   author's assumptions. include_sensitivity=true when the question asks how the value changes with
   WACC or terminal growth.
 - search_documents(query): search the text of the company's filings (annual report, fact sheet) for
-  qualitative questions: strategy, risks, clients, people, policies, management commentary.
-  Write the query as a short search phrase.
+  qualitative questions: strategy, risks, clients, people, policies, management commentary, and for
+  figures that are printed in the filings but are not in the metric_id list (e.g. a line item in the
+  notes to the accounts). Write the query as a short search phrase naming the item.
+- explain_period(period): what a period label means: its start and end dates. Use it for questions
+  about which dates or months a period covers, or how a fiscal period relates to a calendar year.
 
 ALLOWED VALUES
 metric_id:
 {_bullets(catalog.metrics)}
+  - {NOT_LISTED}: the figure asked about is not in this list (the filings are searched for it instead)
 ratio_id:
 {_bullets(catalog.ratios)}
 period: {", ".join(catalog.periods)}   (Indian fiscal years: FY26 = 1 April 2025 to 31 March 2026)
@@ -167,11 +185,14 @@ RULES
 - Use compute_ratio for margins and growth rates; never ask for the inputs separately to work them out.
 - A question about a change between two years of a ratio needs one compute_ratio call per year.
 - A question that asks for figures and an explanation is "mixed": add a search_documents call.
+- A figure that is not in the metric_id or ratio_id list may still be in the filings: use
+  search_documents for it. Never substitute a different metric_id for the one asked about.
 - Set question_type to out_of_scope, make no calls, and set refusal_reason when the question:
   asks for personal investment advice or what to do with the shares (investment_advice);
   asks for a forecast of the share price or market moves (price_prediction);
   is about, or compares with, any other company (other_company);
-  needs a period or figure that is not in the allowed values above (outside_data).
+  asks for a figure for a period that has no data (outside_data). A figure missing from the
+  metric_id list is not a reason to refuse; a question about what a period means is not either.
 - Otherwise refusal_reason is "none". Most questions need at least one call.
 
 OUTPUT FORMAT
@@ -190,8 +211,38 @@ def _to_call(item: dict) -> ToolCall:
                                           if k in fields and k in CALL_FIELDS and v is not None})
 
 
+# Tools whose period must have data in the database (explain_period needs none).
+_DATA_TOOLS = ("get_financial_fact", "compute_ratio")
+# Refusals that contradict a not_listed call: that call asks for a reported figure, which is never
+# advice or a forecast, and a figure missing from the metric list is not outside the data (the
+# filings may print it). Seen live: lease interest -> not_listed + "investment_advice". A refusal
+# for another company still stands. The pattern pre-check (guardrails.py) runs before the router.
+_NOT_LISTED_OVERRIDES = ("outside_data", "investment_advice", "price_prediction")
+
+
+def _missing_years(calls: list[ToolCall], periods: list[str], max_calls: int, problems: list[str]) -> list[ToolCall]:
+    """The rule "a change between two years needs one call per year", enforced in code: when the
+    question names two or more periods with data and a fact/ratio was fetched for only some of them,
+    add the same lookup for the others (within max_calls). The small model drops the earlier year
+    (seen live, PDEV-17 in M5 and again after the 2026-10-04 prompt change)."""
+    if len(periods) < 2:
+        return []
+    added = []
+    for c in [c for c in calls if c.tool in _DATA_TOOLS]:
+        key = {k: v for k, v in c.args.items() if k != "period"}
+        have = {d.args.get("period") for d in calls + added if d.tool == c.tool
+                and {k: v for k, v in d.args.items() if k != "period"} == key}
+        for p in periods:
+            if p not in have and len(calls) + len(added) < max_calls:
+                added.append(ToolCall(tool=c.tool, args={**c.args, "period": p}))
+                have.add(p)
+                problems.append(f"added {c.tool} for {p}: the question names it and the router left it out")
+    return added
+
+
 def route(question: str, catalog: Catalog, llm_fn, *, max_calls: int) -> RoutePlan:
-    reply = llm_fn(router_messages(question, catalog), schema=route_schema(catalog, max_calls))
+    named = [p for p in dict.fromkeys(periods_in(question)) if p not in catalog.periods]
+    reply = llm_fn(router_messages(question, catalog), schema=route_schema(catalog, max_calls, named))
     failed = dict(question_type="routing_failed", raw=reply.text, model=reply.model)
     try:
         data = json.loads(reply.text)
@@ -203,16 +254,33 @@ def route(question: str, catalog: Catalog, llm_fn, *, max_calls: int) -> RoutePl
 
     qtype = data["question_type"]
     reason = data.get("refusal_reason") if data.get("refusal_reason") in REFUSAL_REASONS else "none"
+    items = [c for c in data.get("calls", []) if isinstance(c, dict)]
+    problems = []
+    not_listed = any(c.get("tool") == "get_financial_fact" and c.get("metric_id") == NOT_LISTED for c in items)
+    if (qtype == "out_of_scope" or reason != "none") and not_listed and reason in (*_NOT_LISTED_OVERRIDES, "none"):
+        problems.append(f"router refused ({qtype}, {reason}) while asking for a figure not in the metric list; "
+                        "not a refusal reason, so the filings are searched")
+        qtype, reason = "qualitative", "none"
     if qtype == "out_of_scope" or reason != "none":
         return RoutePlan(question_type=qtype, refusal_reason=reason if reason != "none" else "outside_scope",
                          refuse=True, raw=reply.text, model=reply.model)
 
-    problems = []
-    items = [c for c in data.get("calls", []) if isinstance(c, dict)]
     if len(items) > max_calls:
         problems.append(f"router asked for {len(items)} calls; cut to {max_calls}")
         items = items[:max_calls]
+    for i, c in enumerate(items):
+        if c.get("tool") == "get_financial_fact" and c.get("metric_id") == NOT_LISTED:
+            items[i] = {"tool": "search_documents", "query": c.get("query") or question}
+            problems.append(f"router chose metric_id {NOT_LISTED}; the filings are searched instead")
     calls = [_to_call(c) for c in items]
     if not calls:
         return RoutePlan(**failed, problems=["router chose no tools and gave no refusal reason"])
+    with_data = [p for p in dict.fromkeys(periods_in(question)) if p in catalog.periods]
+    calls += _missing_years(calls, with_data, max_calls, problems)
+    no_data = [c for c in calls if c.tool in _DATA_TOOLS and c.args.get("period") not in catalog.periods]
+    if len(no_data) == len(calls):
+        # Decided by code, not the model: every lookup is for a period with no data.
+        return RoutePlan(question_type="out_of_scope", refusal_reason="outside_data", refuse=True, raw=reply.text,
+                         model=reply.model, problems=[f"{c.tool} for {c.args.get('period')}, which has no data"
+                                                      for c in no_data])
     return RoutePlan(question_type=qtype, calls=calls, problems=problems, raw=reply.text, model=reply.model)

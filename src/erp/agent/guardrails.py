@@ -4,7 +4,9 @@ Runs before the router. A question asking for investment advice (including valua
 such as "undervalued"), a share-price forecast, about another company, or about a period later
 than the latest data (a forecast, e.g. "revenue in FY28") is refused here with the fixed text
 from loop.py, and no LLM or tool is called. The router's own refusal stays as a
-second line for phrasings these patterns miss.
+second line for phrasings these patterns miss. Exception (loop.py): a period after the latest data
+is refused unless the router sends the question only to explain_period ("which dates does Q2 FY27
+cover?" is not a forecast).
 
 The patterns live in config/agent.yaml (`guardrails`); other-company names live in the company
 config, because which companies are "other" depends on the company being researched.

@@ -1,8 +1,8 @@
-"""Tool layer: the four existing tools behind one common interface. No LLM inside.
+"""Tool layer: the tools behind one common interface. No LLM inside.
 
     run_tool(call: ToolCall, env: ToolEnv) -> ToolResult
 
-Each tool has a typed input model (FactArgs, RatioArgs, DCFArgs, SearchArgs). Every result,
+Each tool has a typed input model (FactArgs, RatioArgs, DCFArgs, SearchArgs, PeriodArgs). Every result,
 success or failure, is a ToolResult with the same shape:
   - numbers:  every figure the answer may use, each pointing at an evidence_id, with a display
               string formatted by code (the LLM copies it; it never rounds or converts).
@@ -15,11 +15,15 @@ Evidence ids are stable strings that point back into the stores:
   calc:<computed_id>    a row in SQLite `computed_metric` (inputs are fact:<id> entries)
   dcf:<run_id>          a row in SQLite `dcf_run`
   chunk:<chunk_id>      a chunk in ChromaDB
+  period:<label>        a period's dates (label with '_' for spaces), from the company config (fiscal_year_end_month) and the
+                        period resolver (periods.py)
 """
 import sqlite3
+from datetime import date
 from pathlib import Path
 from typing import Callable, Literal
 
+import yaml
 from pydantic import BaseModel, Field, ValidationError
 
 from erp.config import REPO
@@ -27,12 +31,12 @@ from erp.dcf.assumptions import AssumptionError
 from erp.dcf.engine import DCFError
 from erp.dcf.run import DCFResult, run_dcf
 from erp.ingest.embed import EmbeddingError, embed_texts
-from erp.periods import PeriodError
+from erp.periods import PeriodError, resolve_period
 from erp.tools.facts import FactLookupError, FactResult, get_financial_fact
 from erp.tools.ratios import RatioError, compute_ratio, load_ratios
 from erp.tools.search import SearchError, search_documents
 
-TOOL_NAMES = ("get_financial_fact", "compute_ratio", "run_dcf", "search_documents")
+TOOL_NAMES = ("get_financial_fact", "compute_ratio", "run_dcf", "search_documents", "explain_period")
 Basis = Literal["consolidated", "standalone"]
 
 
@@ -61,8 +65,12 @@ class SearchArgs(BaseModel):
     fiscal_year: int | None = None
 
 
+class PeriodArgs(BaseModel):
+    period: str
+
+
 ARGS_MODELS = {"get_financial_fact": FactArgs, "compute_ratio": RatioArgs,
-               "run_dcf": DCFArgs, "search_documents": SearchArgs}
+               "run_dcf": DCFArgs, "search_documents": SearchArgs, "explain_period": PeriodArgs}
 
 
 class ToolCall(BaseModel):
@@ -73,8 +81,8 @@ class ToolCall(BaseModel):
 # ---------- typed outputs ----------
 
 class Evidence(BaseModel):
-    evidence_id: str                  # 'fact:12', 'calc:3', 'dcf:1', 'chunk:...'
-    kind: Literal["fact", "calc", "dcf_run", "doc_chunk"]
+    evidence_id: str                  # 'fact:12', 'calc:3', 'dcf:1', 'chunk:...', 'period:FY26'
+    kind: Literal["fact", "calc", "dcf_run", "doc_chunk", "config"]
     source_id: int | None = None      # SQLite source_document id (None for calc / dcf_run)
     source_title: str
     page: int | None = None           # PDF page index, 1-based
@@ -174,7 +182,7 @@ def _unverified_note(facts: list[FactResult]) -> list[str]:
             f"{', '.join(sorted({f.entry_method for f in facts if not f.verified}))})."]
 
 
-# ---------- the four tools ----------
+# ---------- the tools ----------
 
 def _fact_tool(a: FactArgs, env: ToolEnv) -> ToolResult:
     f = get_financial_fact(env.conn, env.ticker, a.metric_id, a.period, a.basis)
@@ -283,8 +291,43 @@ def _search_tool(a: SearchArgs, env: ToolEnv) -> ToolResult:
                       detail={"results": [h.model_dump() for h in hits]})
 
 
+def _day(d: date) -> str:
+    return f"{d.day} {d.strftime('%B %Y')}"
+
+
+def _period_tool(a: PeriodArgs, env: ToolEnv) -> ToolResult:
+    """What a period label means: its real dates, from the company's fiscal year end month (company
+    config) and the period resolver. No database facts are needed, so it works for any valid label."""
+    config = REPO / "config" / "companies" / f"{env.ticker.lower()}.yaml"
+    with open(config) as f:
+        company = (yaml.safe_load(f) or {})["company"]
+    fy_end = company["fiscal_year_end_month"]
+    p = resolve_period(a.period, fy_end)
+    name = company.get("name", env.ticker)
+    end_month = date(2000, fy_end, 1).strftime("%B")
+    dates = f"{_day(p.start_date)} to {_day(p.end_date)} ({p.start_date.isoformat()} to {p.end_date.isoformat()})"
+    if p.period_type == "FY":
+        notes = [f"{p.label} is {name}'s fiscal year from {dates}; its fiscal year ends in {end_month}."]
+        if p.start_date.month == 1:
+            notes.append(f"{p.label} is the same as calendar year {p.end_date.year}.")
+        else:
+            notes.append(f"{p.label} is not calendar year {p.end_date.year} (1 January to 31 December "
+                         f"{p.end_date.year}); it covers part of {p.start_date.year} and part of {p.end_date.year}.")
+    else:
+        fy = resolve_period(f"FY{p.fiscal_year % 100:02d}", fy_end)
+        notes = [f"{p.label} is quarter {p.period_type[1]} of {fy.label}, from {dates}. {fy.label} runs from "
+                 f"{_day(fy.start_date)} to {_day(fy.end_date)}; the fiscal year ends in {end_month}."]
+    # Evidence ids carry no spaces ('Q3 FY27' -> 'period:Q3_FY27'), so "[period:Q3_FY27]" reads as one id.
+    ev = Evidence(evidence_id=f"period:{p.label.replace(' ', '_')}", kind="config", period=p.label,
+                  source_title=f"Company config ({config.relative_to(REPO)}: fiscal_year_end_month = {fy_end}) "
+                               f"and the period resolver (src/erp/periods.py)")
+    return ToolResult(tool="explain_period", args=a.model_dump(), ok=True, evidence=[ev], notes=notes,
+                      detail=p.model_dump(mode="json"))
+
+
 RUNNERS = {"get_financial_fact": (FactArgs, _fact_tool), "compute_ratio": (RatioArgs, _ratio_tool),
-           "run_dcf": (DCFArgs, _dcf_tool), "search_documents": (SearchArgs, _search_tool)}
+           "run_dcf": (DCFArgs, _dcf_tool), "search_documents": (SearchArgs, _search_tool),
+           "explain_period": (PeriodArgs, _period_tool)}
 
 # Expected refusals from the tools. Anything else is a bug and is raised, not hidden.
 TOOL_ERRORS = (FactLookupError, PeriodError, RatioError, AssumptionError, DCFError, SearchError, EmbeddingError)

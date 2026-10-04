@@ -14,7 +14,9 @@ It reads the composed answer text and checks it against the tool results of the 
    `numbers_in_text` is the list of tool numbers the text actually says (so numbers_used matches
    the text, not the LLM's list).
 3. Comparisons. A sentence that says a figure increased/decreased/rose/fell/was higher/lower
-   needs both values in the tool results, and their order must match the word. "X to Y",
+   needs both values in the tool results, and their order must match the word. "<figure> ...
+   higher/lower than <figure>" orders the two figures as written (same kind of unit), and is
+   not read as a direction of change. "X to Y",
    "increases to Y", "decreases to Y" are checked against the base or earlier value. A DCF
    sensitivity-grid value must be the cell for the WACC / terminal growth the sentence states.
 4. Interpretive words ("stable", "strong") with no tool figure behind them: warnings only.
@@ -82,7 +84,7 @@ NUM_RE = re.compile(r"""
 """, re.X | re.I)
 PAGE_BEFORE = re.compile(r"(?:\bpages?|\bp\.|\bpp\.)\s*$", re.I)
 CITE_RE = re.compile(r"\[([^\[\]]*)\]")
-ID_RE = re.compile(r"\b(?:fact|calc|dcf|chunk):[^\s,;\]]+")
+ID_RE = re.compile(r"\b(?:fact|calc|dcf|chunk|period):[^\s,;\]]+")
 SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-Z\"'(₹])|\n+")
 CLAUSE_SPLIT = re.compile(r";|,\s*(?:and|but|while|whereas|although|though)\b|\s(?:but|while|whereas|although|though)\s")
 
@@ -106,6 +108,7 @@ DIR_RE = re.compile(rf"(?P<up>{_alt(_UP)})|(?P<down>{_alt(_DOWN)})|(?P<same>{_al
 TO_CLAIM_RE = re.compile(
     rf"(?:(?P<up>{_alt(_UP_TO)})|(?P<down>{_alt(_DOWN_TO)})|(?P<same>{_alt(_SAME)}))"
     r"(?:\s+(?!from\b)[^\s⟨]+){0,3}?\s+to\s+⟨N(?P<n>\d+)⟩", re.I)
+THAN_FIGURE_RE = re.compile(r"\s+than\s+(?:[^\s⟨]+\s+){0,3}?⟨N(?P<n>\d+)⟩", re.I)
 FROM_TO_RE = re.compile(r"\bfrom\s+⟨N(?P<a>\d+)⟩(?:\s+(?:in|for)\s+⟨P\d+⟩)?\s*,?\s+to\s+⟨N(?P<b>\d+)⟩", re.I)
 ATTACHED_PERIOD = re.compile(r"^\s*,?\s*(?:in|for|during|as of|at the end of)\s+(?:the\s+)?$", re.I)
 
@@ -225,12 +228,15 @@ def _numbers_in(strings) -> list[_Token]:
     return [t for s in strings for t in _tokens(s) if t.kind == "number"]
 
 
+def _units_compatible(a: str | None, b: str | None) -> bool:
+    """Two written units that can describe the same kind of figure (no unit written fits any)."""
+    units = {a, b}
+    return None in units or len(units) == 1 or ("INR_ANY" in units and all(u.startswith("INR") for u in units))
+
+
 def _same_number(tok: _Token, other: _Token) -> bool:
     """Two numbers found in text (answer vs passage or note) that say the same thing."""
-    units = {tok.unit, other.unit}
-    compatible = None in units or len(units) == 1 or ("INR_ANY" in units and all(
-        u.startswith("INR") for u in units))
-    return abs(tok.value) == abs(other.value) and compatible
+    return abs(tok.value) == abs(other.value) and _units_compatible(tok.unit, other.unit)
 
 
 # ---------- the verifier ----------
@@ -561,6 +567,29 @@ def _check_comparisons(clause: _Clause, ctx: _Context, issue) -> None:
         if said != actual:
             issue("comparison_wrong_direction", "error", span, f"says {label(said)} to {n.display} in {n.period}; "
                   f"{earlier.period} was {earlier.display}, so it is {label(actual)}")
+
+    # "<figure> ... lower/higher than <figure>": an ordering of two written figures, not a change.
+    # (A growth rate of 4.58% can be "lower than" a 10% figure without anything having fallen; read
+    # as a change, the positive growth rate made "lower" look wrong: the EV-F01 false rejection.)
+    for v in DIR_RE.finditer(text):
+        if any(s <= v.start() < e for s, e in consumed):
+            continue
+        m = THAN_FIGURE_RE.match(text, v.end())
+        before = re.findall(r"⟨N(\d+)⟩", text[:v.start()])
+        if not m or not before:
+            continue
+        consumed.append(v.span())
+        a, b = clause.numbers[int(before[-1])], clause.numbers[int(m.group("n"))]
+        said = "up" if v.group("up") else "down" if v.group("down") else "same"
+        span = f"{a.text} ... {v.group(0)} than {b.text}"
+        if not _units_compatible(a.unit, b.unit):
+            issue("comparison_unsupported", "error", span, f"compares {a.text} with {b.text}, which are not the "
+                  f"same kind of figure")
+            continue
+        actual = _direction(b.value, a.value)
+        if said != actual:
+            issue("comparison_wrong_direction", "error", span, f"says {a.text} is {v.group(0)} than {b.text}, "
+                  f"which is not so")
 
     # any other direction word: "net margin decreased from FY25 to FY26", "revenue grew 4.58%"
     for v in DIR_RE.finditer(text):

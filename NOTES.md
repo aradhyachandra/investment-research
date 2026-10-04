@@ -2,6 +2,60 @@
 
 Open questions, TO VERIFY items, and validation TODOs. Newest first.
 
+## M7.1 dev-failure fixes (2026-10-04)
+
+Plain explanation: `docs/M7_1_dev_failure_fixes.md`. Regression tests (new phrasings only):
+`tests/test_dev_failure_fixes.py`.
+
+TO VERIFY / decide (author):
+- **`explain_period`** reads `fiscal_year_end_month` from `config/companies/<ticker>.yaml` and uses
+  the period resolver. It works for any valid label, including periods with no data (Q3 FY24). It
+  says "is not calendar year N" for any fiscal year that does not start in January. Its evidence
+  kind is `config` (new value in `Evidence.kind`); evidence id `period:<label>` with `_` for spaces.
+  The eval's numeric citation scoring ignores it (no numeric claims). EV-B03's gold source is AR
+  p.166 (balance-sheet date); the answer now cites the config instead. Decide whether that is fine.
+- **Routing gold for period questions.** `config/eval.yaml` still says B questions expect
+  `get_financial_fact`, and pure period questions are unscored. Consider `explain_period` as the
+  expected tool for B questions with no gold value. Not changed (scoring rule; author's call).
+- **`not_listed` metric choice** -> `search_documents` with the user's question as the query. Code
+  overrides a router refusal for outside_data / investment_advice / price_prediction when the same
+  reply chose `not_listed` (incoherent: a reported figure is never advice). other_company refusals
+  still stand. Residual risk: an advice phrasing that the pre-check misses AND the model routes
+  as `not_listed` would now be searched and composed. The banned-phrase guard on the composed text
+  still applies. TO VERIFY on more phrasings.
+- **Periods named in the question** (read by the verifier's tokenizer) are added to the router's
+  period enum. Code refuses (outside_data) when every fact/ratio call is for a period with no data,
+  so "revenue in FY19" is refused by code, not by the model.
+- **Future periods.** The pre-check's "period after the latest data" reason no longer refuses at
+  once. It refuses unless the router's calls are all `explain_period`. One extra router call for
+  such questions.
+- **Missing year added by code.** If the question names two or more periods with data and the
+  router fetched a fact/ratio for only some of them, code adds the others (within max_calls).
+  Could add an unneeded lookup, e.g. "FY26 revenue vs the FY25 guidance". Harmless (extra data),
+  but routing scores may count the extra call as wrong.
+- **Prompt brittleness (qwen2.5:3b), measured again.** Each prompt edit alone kept PDEV-11/17
+  right; all together broke both. An extra worked example (employee training) broke PDEV-11 and
+  was dropped. The router prompt should be treated as fragile. Prefer code checks over prompt
+  wording.
+- **Known gap, not fixed: metric substitution.** Held-out "What was TCS's tax expense in FY26?"
+  -> `profit_after_tax`. Nothing in code checks that the chosen metric matches the figure named.
+  Idea: require the metric's display name or a `quantity_aliases` entry in the question, else
+  search. Not built (it would re-route paraphrases with no alias).
+- **Verifier: "higher/lower than <figure>"** is now an ordering of the two written figures (as
+  written, signed), which must be the same kind of unit. It no longer goes through the
+  growth-sign rule. It checks the order, not whether the two figures are comparable in meaning.
+  Only "higher"/"lower" (+"than") are covered; "more/less/greater than" were never checked.
+- **Verifier gap seen in passing (not fixed):** a figure glued to a garbled ₹ glyph ("H1,761
+  crore", copied from a passage) is not read as a number at all, so it is neither grounded nor
+  flagged. Seen live on a goodwill question.
+- **Retrieval (EV-E03): splitting table runs from prose at ingest was tried and reverted.**
+  recall@5 9 of 12 -> 9 of 12, recall@10 11 of 12 -> 11 of 12, on scratch indexes (same code,
+  switch off/on). The customer sentence still shares a chunk with unrelated notes, because note
+  sub-headings ("Information about major customers") are body-size bold and are not detected as
+  headings. Next idea: sub-heading detection. Note for any future chunking change: the index only
+  re-builds on a file-hash or embedding-model change, so a chunking change needs `data/chroma/`
+  deleted and re-indexed by hand.
+
 ## M7 eval harness (2026-10-04)
 
 TO VERIFY / decide (author). All scoring rules are in `config/eval.yaml` or `src/erp/eval/score.py`:

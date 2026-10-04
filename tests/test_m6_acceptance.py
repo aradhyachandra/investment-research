@@ -93,8 +93,10 @@ def test_unknown_listed_ids_are_rejected(env):
 
 def test_comparison_with_one_year_fetched_is_replaced(env):
     # PDEV-17 (M5 live): router fetched FY26 only; the composer said the margin decreased from FY25.
+    # Since 2026-10-04 the router adds a year the question names but the model left out, so the
+    # question here names only FY26: the composer's FY25 comparison is still unsupported.
     text = "Net margin was 18.43% in FY26 and it decreased from FY25 to FY26."
-    a = answer_question("How did net margin change from FY25 to FY26?", env, llm([NET_MARGIN_26], text))
+    a = answer_question("How did net margin change in FY26?", env, llm([NET_MARGIN_26], text))
     assert_rejected(a, "decreased", "comparison_unsupported")
 
 

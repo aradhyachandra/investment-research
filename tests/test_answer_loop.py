@@ -177,10 +177,12 @@ def test_refusal_texts_have_no_advice_language():
 
 
 def test_every_tool_failing_is_a_refusal_with_the_reasons(env):
-    llm = fake_llm(numeric_route({**FACT_REV26, "period": "FY22"}))
-    a = answer_question("Revenue FY22?", env, llm)
+    # FY25 growth needs FY24 revenue, which is not loaded: the tool runs and fails. (A lookup for a
+    # period with no data at all, e.g. FY22, is refused by the router's code check before any tool.)
+    llm = fake_llm(numeric_route({"tool": "compute_ratio", "ratio_id": "revenue_growth_yoy", "period": "FY25"}))
+    a = answer_question("Revenue growth FY25?", env, llm)
     assert a.refused and a.refusal_reason == "data_not_available"
-    assert "FY22" in a.answer_text and a.numbers_used == []
+    assert "FY24" in a.answer_text and a.numbers_used == []
     assert len(llm.calls) == 1                       # nothing to compose from
 
 
