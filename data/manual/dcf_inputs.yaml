@@ -1,8 +1,10 @@
-# DRAFT - TCS DCF assumptions drafted by Claude for Aradhya. NOT yet reviewed by Aradhya or a finance partner.
+# TCS DCF assumptions. Drafted by Claude (AI); adopted as the working file by Aradhya on 2026-10-04.
+# STATUS: author-adopted, NOT reviewed by a finance partner. Open TO VERIFY items remain (see each rationale and NOTES.md).
+# Any README or write-up must say these assumptions were AI-drafted.
 # Illustrative: what these assumptions imply. Not a prediction. Not investment advice.
 # Money in INR crore, consolidated Ind AS, FY26 (year ended 31 Mar 2026). AR = TCS Integrated Annual Report 2025-26 (PDF page numbers).
 ticker: TCS
-label: "TCS DRAFT (Claude-drafted, pending author review)"
+label: "TCS working assumptions (AI-drafted, author-adopted, no finance-partner review)"
 units:
   money: INR_CRORE
   shares: SHARES_CRORE

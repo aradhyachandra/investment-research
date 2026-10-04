@@ -64,8 +64,7 @@
 
 **Known issues / flags for the author**
 - `eval/questions.jsonl` (P0.4) does not exist, so all questions are PROVISIONAL (tests/ only).
-- `data/manual/dcf_inputs.yaml` (P0.3) does not exist, so live DCF questions answer "not
-  available". The agent never reads the DRAFT file (Claude only looked at its header while exploring).
+- `data/manual/dcf_inputs.yaml` now exists (AI-drafted, adopted by the author 2026-10-04, no finance-partner review; see its header). Live DCF questions can run once Ollama is up. (Earlier line said it did not exist.)
 - Unsupported comparison seen live (PDEV-17, "net margin decreased" with no FY25 figure): M6.
 - No check yet that numbers written in `answer_text` match tool numbers (verifier, M6).
 - Unit-conversion questions ("in INR million") and pure period questions have no tool; the
