@@ -1,0 +1,75 @@
+# Eval harness settings (M7, src/erp/eval/). Scoring rules, not company facts and not gold
+# answers: the gold lives only in eval/questions.jsonl (author-owned, read only).
+# Everything here is a judgement call by Claude, written down so the author can change it.
+# TO VERIFY (author): each rule below.
+
+questions: eval/questions.jsonl
+results_dir: eval/results           # dev runs -> results/dev/<run>, the test run -> results/test/<run>
+
+# The test split runs once (plan 6.1, Section 9 M7). run_eval.py asks for this phrase, typed exactly.
+test_confirmation_phrase: RUN TEST SPLIT
+
+# Systems compared (plan 6.3). A test run always runs all of them, in one go.
+systems:
+  full: full system (pre-check, router, tools, composer, verifier on)
+  full_no_verifier: full system with the verifier off (ablation; its report is still recorded)
+  naive_rag: naive RAG baseline (same LLM and Chroma index; no SQLite, tools, guards or verifier)
+
+# Routing accuracy (secondary metric). The question file has no gold routes, so the expected
+# route is coarse: the set of tools a question's category needs (plan 3.3 table). Call order
+# and repeats do not matter. "period right" (categories in `check_period`) additionally needs
+# every fact/ratio call to use the question's gold_period.
+# Not scored: B questions with no gold_value (pure period questions: no tool exists for them)
+# and G questions expecting not_available (refusal correctness covers those).
+routing:
+  expected_tools:
+    A: [get_financial_fact]
+    B: [get_financial_fact]
+    C: [compute_ratio]
+    D: [run_dcf]
+    E: [search_documents]
+    F: [compute_ratio, search_documents]
+  check_period: [A, B, C]
+
+# Refusal correctness. How an answer's behaviour is classified:
+#   refuse         refused with one of `refuse_reasons`
+#   not_available  refused with one of `not_available_reasons`, or (not refused) the text has a
+#                  decline phrase and no numeric claim
+#   partial        not refused, has numeric claims, and also has a decline phrase
+#   answered       anything else
+# Which classes count as correct for each expected_behavior in the question file:
+behavior:
+  refuse_reasons: [investment_advice, price_prediction, other_company, outside_scope]
+  not_available_reasons: [outside_data, data_not_available, routing_failed]
+  decline_phrases:
+    - not available
+    - not in the data
+    - not in the available data
+    - not provided
+    - not mentioned
+    - not contain
+    - no information
+    - cannot answer
+    - can't answer
+    - could not answer
+    - unable to
+    - not possible to
+  accept:
+    answer: [answered, partial]
+    refuse: [refuse]
+    not_available: [not_available, partial, refuse]
+
+# Known expected failures, listed in every report. No tool converts units (decided for M7:
+# no conversion tool in this milestone), so a question whose gold unit is not a unit the tools
+# report can only be answered by LLM arithmetic, which the system does not allow.
+expected_failures:
+  no_conversion_tool_units: [INR_MILLION, INR_LAKH_CRORE]
+
+# Naive-RAG baseline (plan 6.3).
+baseline:
+  top_k: null            # null = the agent's tools.search_top_k (same retrieval depth)
+
+# Manual labelling helper for qualitative citations (plan 6.2, part 2).
+qualitative_sample:
+  n: 20
+  seed: 0

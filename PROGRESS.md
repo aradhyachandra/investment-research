@@ -1,5 +1,106 @@
 # PROGRESS
 
+## 2026-10-04 — M7: eval harness, naive-RAG baseline, verifier ablation
+
+**Done**
+- `src/erp/eval/` (code) + `eval/run_eval.py`, `eval/sample_qualitative.py` (commands):
+  - `questions.py`: reads `eval/questions.jsonl` (read only; validates fields, splits, ids,
+    must_refuse vs expected_behavior). Never written to (a test checks the hash).
+  - `claims.py`: numeric claims read from the answer text with the verifier's tokenizer (value,
+    written unit incl. INR lakh crore and USD, periods in the sentence; page numbers, citation ids,
+    dates, years excluded), each with `supported` and the cited (source_id, page) behind it;
+    qualitative claims = non-numeric sentences of LLM-written answers. Same code for all systems.
+  - `score.py`: gold match (exact for tolerance 0, relative tolerance otherwise; unit and period
+    must match), numeric citation vs gold_sources, behaviour classes vs expected_behavior, coarse
+    routing check, unsupported claims, verifier rejected / would reject, advice words.
+  - `metrics.py`: counts ("k of n"), per category and headline, and `report.md`.
+  - `baseline.py`: naive RAG (question -> same Chroma search, top 5, same LLM, generic prompt;
+    no SQLite connection given, no tools, guards or verifier).
+  - `cli.py`: dev runs unlimited; `--test` needs the typed phrase `RUN TEST SPLIT`, runs all three
+    systems together, writes to `eval/results/test/`, refuses a second run without `--force`;
+    `--rescore` re-scores saved answers without the LLM. Saves run.json (timestamp, git SHA, model,
+    file hashes, status), per-system jsonl (Answer + claims + citations + verifier report + score),
+    metrics.json, report.md.
+  - `qualitative.py`: samples ~20 qualitative claims (seed 0) into a CSV with the cited passage
+    text and an empty `supports` column; `--tally` counts labels.
+- `loop.answer_question(..., verify=False)` for the ablation: the verifier still runs and its report
+  is recorded, but a rejected text ships. Default unchanged.
+- `config/eval.yaml`: all scoring rules (routing expectations per category, behaviour classes and
+  decline phrases, accepted behaviours, known expected failures, baseline top_k, sample size).
+- `eval/results/` gitignored.
+- Tests: 545 passing (41 new): `test_eval_harness.py`, `test_m7_acceptance.py`.
+
+**M7 acceptance (plan Section 9)**
+- `run_eval.py` outputs per-category and headline metrics for dev: yes (deterministic acceptance
+  test on the real dev split with a scripted LLM, and two live runs below).
+- Test split runs once; results saved: the once-only gate, separate folder and saving are built and
+  tested (synthetic question file). **The real test split has NOT been run** (see flags).
+
+**Live dev runs** (qwen2.5:3b, 20 dev questions, git 9da27e5-dirty = this milestone's uncommitted
+code; `eval/results/dev/20261004-142147_9da27e58` and `20261004-143418_9da27e58`). Plumbing
+results: facts 12 of 12 unverified (llm_extracted) and gold 20 of 20 "pending Aradhya check".
+Question-level counts were identical in both runs:
+
+| Metric | full | verifier off | naive RAG |
+|---|---|---|---|
+| Numeric accuracy | 10 of 14 | 10 of 14 | 1 of 14 |
+| Gold-matching claims citing a gold page | 8 of 8 | 8 of 8 (run 2: 9 of 9) | 0 of 1 |
+| Routing: right tools / and period | 17 of 18 / 16 of 18 | same | n/a |
+| Refusal correctness (G) | 2 of 3 | 2 of 3 | 0 of 3 |
+| Unsupported numeric claims | 0 of 34 | 1 of 21 (run 2: 1 of 24) | 5 of 20 (run 2: 5 of 18) |
+| Verifier rejections | 2 of 16 | 0 of 16 (would reject 2) | n/a |
+
+"All numeric claims citing a gold page": full 21 of 29, verifier off 16 of 16 (run 2: 19 of 19),
+naive 1 of 16 (run 2: 1 of 14); see NOTES.md on why full is lower (quoted passages in templates).
+Known expected failures, reported as failures: EV-B02, EV-B06 (INR million / lakh crore; no
+conversion tool, by decision).
+
+**Dev failures worth fixing (listed, NOT changed)**
+1. EV-B03 ("Is FY26 calendar 2026?") and EV-E04 (lease interest): the router refuses as
+   outside_data. B03 needs a period tool (or a period answer from config); E04 needs a search.
+2. EV-E03 (client concentration): retrieval miss, composer says "not contain" (known since M4).
+3. EV-E02 (dividends): the LLM added 3 x 11 + 46 = 79 itself; the verifier caught it (right), then
+   the template quotes passages without the 110 total. No dividend metric/tool.
+4. EV-F01: verifier rejected "1.35% ... lower than the 8.8%", which reads as a true comparison
+   (8.8% is a passage figure). Looks like a false rejection in the comparison check: verifier bug
+   to investigate.
+5. EV-C05: router added an FY25 growth call (needs FY24 data) next to the right FY26 call.
+6. EV-G05 (3-year CAGR): router fetched yoy growth; the answer says CAGR "not directly
+   computable", but the classifier scores it "answered" (phrase list not tuned on dev).
+7. Baseline: answered G01 (price question) with a growth story, and G03 (Infosys); its figures
+   come from fact-sheet/IFRS or garbled ("H8,350 crore") chunks.
+
+**Decisions**
+- Numeric accuracy is per question (a matching claim exists), not per claim; see NOTES.md.
+- Routing gold is coarse (category -> tool set) because the question file has no gold routes.
+- The verifier-off arm keeps the pre-check and advice-word guard (not part of the verifier).
+- The baseline has no guards on purpose; its advice-word count is a metric (0 of 20 on dev).
+- Did not run the test split: the gold is marked pending author check and every fact is
+  unverified, so the once-only run would be spent on numbers that cannot be quoted. The run, the
+  typed confirmation and the decision to use it are the author's.
+- Results folder gitignored (annual-report excerpts).
+
+**Known issues / flags for the author**
+- Review the scoring rules in `config/eval.yaml` and NOTES.md (M7) before trusting any count.
+- The dev results above came from uncommitted code (`-dirty`); re-run dev after committing.
+- Qualitative citations: `eval/results/dev/20261004-142147_9da27e58/qualitative_labels.csv`
+  (20 claims, full + naive RAG) waits for your labels; nothing is graded automatically.
+
+**Next**
+- M8: Streamlit UI (not started). Before it: the author decides on the failures list above and
+  when to run the test split.
+
+**How to run**
+```
+PYTHONPATH=src .venv/bin/python eval/run_eval.py
+PYTHONPATH=src .venv/bin/python eval/run_eval.py --systems full --ids EV-A01 EV-F01
+PYTHONPATH=src .venv/bin/python eval/run_eval.py --test
+PYTHONPATH=src .venv/bin/python eval/sample_qualitative.py eval/results/dev/<run> --systems full naive_rag
+PYTHONPATH=src .venv/bin/python eval/sample_qualitative.py --tally eval/results/dev/<run>/qualitative_labels.csv
+```
+
+---
+
 ## 2026-10-04 — M6: verifier, refusal handling, DCF footer; retrieval investigated
 
 **Done**

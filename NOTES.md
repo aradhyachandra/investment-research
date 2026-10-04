@@ -2,6 +2,41 @@
 
 Open questions, TO VERIFY items, and validation TODOs. Newest first.
 
+## M7 eval harness (2026-10-04)
+
+TO VERIFY / decide (author). All scoring rules are in `config/eval.yaml` or `src/erp/eval/score.py`:
+- Numeric accuracy is per question ("a claim in the answer matches the gold"), not "share of all
+  numeric claims that match gold" (plan 6.2 wording). Reason: an answer may correctly add other
+  figures (e.g. the FY25 value next to FY26), which would count as wrong against one gold value.
+  Claim-level evidence is covered by the citation and unsupported-claim counts.
+- Tolerance 0 = the written value equals the gold value exactly (a rounder figure, e.g. "INR 136"
+  for 136.01, fails). Tolerance t = relative |claim - gold| / |gold| <= t. Units must be written.
+- Claim period = periods in its sentence, else anywhere in the answer. Non-label gold periods
+  (DCF "valuation 2026-03-31") are not checked.
+- Routing gold is coarse (tool set per category, plan 3.3), because the question file has no gold
+  routes. Only A/B/C also check the period. B period questions and G not_available are unscored.
+- Behaviour classes depend on a decline-phrase list (heuristic). "not_available" questions also
+  accept a refusal or a partial answer.
+- The baseline gets the same top-k (5) and passage length (900 chars) as the full system, a
+  generic prompt written by Claude (`baseline.py`), and the same JSON-with-cited-ids output.
+  TO VERIFY: whether a different baseline prompt would change its scores a lot (not tuned).
+- Ollama determinism: temperature 0 and seed 0 are set, but full and verifier-off are separate
+  runs. Seen on dev (two runs, 2026-10-04): in run 1 full and verifier-off composed the same text
+  for 16 of 16 composed answers; between runs, 18-19 of 20 answer texts per system were identical,
+  and every question-level count was the same (only claim counts moved). A paired design (one
+  composed text, scored both ways) would guarantee it; not built.
+- Template answers quote retrieved passages, and incidental numbers in those quotes (e.g. GDP
+  growth in a Business Outlook passage) count as numeric claims citing a non-gold page. This is
+  why "all numeric claims citing a gold page" is lower for the full system than for verifier-off.
+  Decide: exclude quoted excerpt lines from numeric claims, or keep (they are shown to the user).
+- Behaviour classifier misses declines phrased as "not directly computable" (EV-G05). The phrase
+  list was not tuned on dev results on purpose.
+- PDF extraction renders ₹ as "H" in some chunks ("H145.99 crore"); such figures are not read as
+  numbers, so the baseline's garbled answers count as having no numeric claim.
+- `eval/results/` is gitignored (annual-report excerpts; results on unverified facts).
+- Each eval run calls compute_ratio / run_dcf, which append audit rows to the local
+  `data/db/sample.sqlite` (computed_metric, dcf_run). Harmless; noted.
+
 ## M6 verifier, refusals, retrieval (2026-10-04)
 
 **Verifier (`src/erp/agent/verifier.py`): TO VERIFY / decide**

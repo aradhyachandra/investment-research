@@ -156,7 +156,10 @@ def _with_dcf_footer(text: str, results: list[ToolResult], cfg: dict) -> str:
     return f"{text.replace(footer, '').rstrip()}\n\n{footer}"
 
 
-def answer_question(question: str, env: ToolEnv, llm_fn=call_llm, *, cfg: dict | None = None) -> Answer:
+def answer_question(question: str, env: ToolEnv, llm_fn=call_llm, *, cfg: dict | None = None,
+                    verify: bool = True) -> Answer:
+    """verify=False is only for the eval ablation (M7, verifier off): the verifier still runs and
+    its report is recorded, but an answer it would reject is shipped as written."""
     cfg = cfg or load_agent_config()
 
     # 0. refusal pre-check: fixed patterns and a future-period check, no LLM (guardrails.py)
@@ -226,9 +229,12 @@ def answer_question(question: str, env: ToolEnv, llm_fn=call_llm, *, cfg: dict |
     cited = [i for i in data.get("cited_evidence_ids") or [] if isinstance(i, str)]
     report = verify_answer(text, ok, cfg=cfg, listed_number_ids=listed, cited_ids=cited)
     warnings += [f"verifier {i.severity} ({i.check}): {i.message}" for i in report.issues]
-    if not report.ok:
+    if not report.ok and verify:
         warnings.append(f"verifier rejected the composed text ({len(report.errors)} error(s)); template answer used")
         return template(report)
+    if not verify:
+        warnings.append(f"verifier off (eval ablation): report recorded, not enforced "
+                        f"({len(report.errors)} error(s))")
 
     numbers_used = report.numbers_in_text
     known_evidence = {e.evidence_id for r in ok for e in r.evidence}
