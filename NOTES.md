@@ -2,6 +2,25 @@
 
 Open questions, TO VERIFY items, and validation TODOs. Newest first.
 
+## M8 Streamlit UI (2026-10-04)
+
+- TO VERIFY: badge mapping. `quarterly_results` counted as Filing (the brief named annual report and
+  fact sheet); `investor_presentation` and `press_release` get "Other document". Change in
+  `config/ui.yaml`.
+- TO VERIFY: `generated_sample` is badged "Author's note" as asked, with an extra line saying it is
+  AI-generated. Consider a separate badge if it is ever indexed (plan 2.5 keeps it out of real runs).
+- The DCF STATUS line is read from the current `data/manual/dcf_inputs.yaml` header, not from the
+  YAML copy stored in the `dcf_run` row (the Answer does not carry it). A later edit to the file
+  changes what old saved answers show.
+- The STATUS line itself says "author-adopted, NOT reviewed by a finance partner"; "AI-drafted" is
+  in the header's first line and in the scenario label, which the page shows next to it.
+- Streamlit 1.65 markdown badges (`:blue-badge[...]`) are used; AppTest sees them as plain text.
+  TO VERIFY the look in other themes.
+- Streamlit sends usage stats by default; turned off in `.streamlit/config.toml`. A user running
+  with a different working directory would not pick that file up (TO VERIFY).
+- Possible schema additions (NOT made, author decides): `doc_type` on Evidence; the assumptions
+  file sha/STATUS on the DCF result; sentence-level claims.
+
 ## M7.1 dev-failure fixes (2026-10-04)
 
 Plain explanation: `docs/M7_1_dev_failure_fixes.md`. Regression tests (new phrasings only):

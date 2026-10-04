@@ -1,0 +1,9 @@
+# Streamlit settings for this repo (M8).
+[browser]
+gatherUsageStats = false   # no usage telemetry sent to Streamlit
+
+[client]
+toolbarMode = "minimal"    # hide developer/deploy menu items
+
+[server]
+headless = true            # do not try to open a browser window

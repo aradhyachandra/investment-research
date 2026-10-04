@@ -1,0 +1,23 @@
+# UI settings (M8). Display settings only; no company facts here.
+
+# Shown on every page, always.
+disclaimer: "Illustrative analysis, not investment advice."
+
+# Citation badges by source_document.doc_type (SQLite). A citation to a document whose doc_type is
+# in neither list gets the "Other document" badge, so nothing is silently called a filing.
+badges:
+  filing: [annual_report, quarterly_results, fact_sheet]
+  authors_note: [analyst_note, generated_sample]
+  # Extra words under the badge, so an AI-generated sample is never mistaken for the author's writing.
+  notes:
+    generated_sample: "AI-generated sample note (reading aid), not written by the author"
+    analyst_note: "Written by the author: interpretation, not evidence"
+
+# --demo mode: saved answers from an eval run (eval/run_eval.py). The newest run folder is used
+# unless a folder is given on the command line.
+demo:
+  results_dir: eval/results/dev
+  system: full          # which saved system's answers to show (full / full_no_verifier / naive_rag)
+
+# Live mode: the SQLite database the agent reads.
+db_path: data/db/sample.sqlite

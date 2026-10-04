@@ -1,5 +1,70 @@
 # PROGRESS
 
+## 2026-10-04 — M8: Streamlit UI
+
+**Done**
+- `app/streamlit_app.py` (entry) + `src/erp/ui/`: `view_model.py` (Answer -> display records, no
+  Streamlit, no arithmetic beyond decimal -> percent for display), `app.py` (plain Streamlit layout,
+  no custom JavaScript or raw HTML), `demo.py` (saved answers from an eval run folder, read only).
+- `config/ui.yaml`: disclaimer, badge mapping by doc_type, demo folder/system, live DB path.
+- `.streamlit/config.toml`: usage telemetry off, minimal toolbar, headless.
+- Page: question box (live) or saved-question list (`--demo`); answer text + who wrote it (model or
+  code-built fallback); notes/limitations; verifier box (collapsed; status, issues, warnings; title
+  says when the fallback was used); figures with badge, document, PDF page (printed page), period,
+  basis, standard, "not yet checked by a human", evidence id, and for ratios the input facts with
+  pages; passages with chunk text (collapsed); calculation paths (collapsed) for ratios (inputs with
+  fact ids and pages, formula, result) and DCF (STATUS line from the assumptions header, scenario
+  label, formulas, WACC build, FCFF table, TV/EV, bridge, sensitivity grid, assumptions with
+  rationale and source, checks, fixed footer); refusals with the fixed text; permanent disclaimer
+  "Illustrative analysis, not investment advice." at the top and bottom.
+- Badges: annual_report / quarterly_results / fact_sheet -> Filing; analyst_note / generated_sample
+  -> Author's note (generated_sample also says "AI-generated sample note, not written by the
+  author"); other -> Other document; not found -> Source type not recorded. Author-note path
+  tested with a fake answer (none indexed).
+- Pinned streamlit 1.65.0 and the 13 new packages it pulled in; `pip check` clean.
+- Tests: 615 passing (37 new, `tests/test_ui.py`). No live model, no Ollama: answers come from the
+  real pipeline with the scripted fake LLM, or are hand-built. The page itself is tested headless
+  with Streamlit `AppTest`.
+- Dev check (not a test; eval/results is gitignored): all 120 saved answers (2 runs x 3 systems x
+  20) render in demo mode with no exception. Demo page viewed in a browser (demo mode, no model).
+
+**M8 acceptance (plan Section 9)**
+- "Trace one number to its source page in <= 3 clicks": structurally tested. Document and PDF page
+  of every figure (and of each ratio input) are outside any expander: 0 clicks. Chunk text and
+  calculation paths: 1 click. Demo question pick: 1 click.
+- "Manual walkthrough of 5 questions": NOT done by me. It is the author's (with one live run).
+
+**Decisions**
+- Evidence has no doc_type; the UI reads it from `tool_results[].detail` (facts: source_doc_type,
+  search hits: doc_type). No schema change.
+- "Claims" = `numbers_used` + cited passages (the Answer has no sentence-level claims[]).
+- The verifier-rejected model text (`rejected_text`) is not displayed; the issues and flagged words are.
+- The caption under the answer never claims more than the verifier checks (figures vs tool results,
+  not wording or passage figures); for answers with no verifier report (naive RAG) it says so.
+- When the model cited no passage, the passage list says it is "every retrieved passage" and may
+  not support the answer.
+- DCF citation shows "valuation date"; chunk citation shows "document period" (the evidence's
+  period field means different things per kind).
+- Tests were written after a first draft of the view model, not strictly before (the Answer shape
+  was fixed, so the draft came first); all acceptance checks are tests.
+
+**Known issues / flags for the author**: see "What to review" in docs/M8_streamlit_ui.md and the
+M8 section of NOTES.md. Main ones: DCF value per share shown without a market price could still be
+read as a target by a careless reader; the F01-type answer (model calls EPS growth "attributable
+profit growth") passes the verifier with only a passage-number warning; the DCF STATUS line is read
+from the current file, not the run's stored copy.
+
+**Next**
+- Author: live walkthrough of 5 questions (one live run), review, then commit (nothing committed).
+- M9 (README, results, demo screenshots, cleanup): not started.
+
+**How to run**
+```
+.venv/bin/streamlit run app/streamlit_app.py -- --demo
+.venv/bin/streamlit run app/streamlit_app.py
+PYTHONPATH=src:tests .venv/bin/pytest -q tests/test_ui.py
+```
+
 ## 2026-10-04 — M7.1: fixes for M7 dev-split failures (bug-fix session, not M8)
 
 **Done** (tests first; regression tests use new phrasings only, `tests/test_dev_failure_fixes.py`)
