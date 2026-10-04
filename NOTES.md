@@ -2,6 +2,28 @@
 
 Open questions, TO VERIFY items, and validation TODOs. Newest first.
 
+## M9 README, results, cleanup (2026-10-04)
+
+- **Plan conflict, flagged not resolved.** Plan 2.5 says no accuracy numbers go in the README until
+  the full dataset, the hand DCF and the frozen test split exist. The M9 brief asked for a generated
+  results section with dev numbers. Done as asked, labelled in the README as "development-stage
+  numbers ... a plumbing check, not a headline". Author to decide whether to keep the dev block in
+  the public README or print "not yet run" for both splits until then.
+- **Dev runs are all dirty-tree** (`9da27e5-dirty` x2, `6788b01-dirty`). Re-run dev on committed code,
+  then `scripts/make_results_table.py --readme`.
+- **questions.jsonl changed since the last dev run**: only `entered_by` changed (commit 5d29315);
+  no question, gold value or source. The results script warns on any hash change.
+- TO VERIFY: one hang in ChromaDB's Rust bindings (creating a client, main thread waiting) during a
+  full test run in a clean clone, in `test_verifier.py`'s last test. Not reproduced in 3 later runs.
+  If it recurs: likely many `PersistentClient`s in one process; a shared session fixture would help.
+- TO VERIFY: setup tested only on macOS with Python 3.13.5; the plan asks for 3.11+.
+- Clean clone: `--demo` has no saved answers (eval/results/ is gitignored). Options for the author:
+  keep it so; or add a small demo fixture with no annual-report text (would need new code).
+- No screenshots: headless Chrome captured only the loading skeleton of the Streamlit page.
+- Download URLs of the two PDFs are not recorded (`url: null`), so the README cannot link the
+  official sources yet. The plan's `sources.md` manifest does not exist; `sources_hashes.txt` does.
+- No LICENSE file. Choose one (PyMuPDF is AGPL-3.0, TO VERIFY its effect).
+
 ## M8 Streamlit UI (2026-10-04)
 
 - TO VERIFY: badge mapping. `quarterly_results` counted as Filing (the brief named annual report and

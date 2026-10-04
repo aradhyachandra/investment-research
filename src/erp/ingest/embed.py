@@ -43,10 +43,6 @@ def embed_texts(texts, purpose="document", cfg=None) -> list:
     return vectors
 
 
-def embedding_model_name(cfg=None) -> str:
-    return (cfg or load_ingest_config())["embedding"]["model"]
-
-
 @dataclass
 class OllamaStatus:
     ok: bool

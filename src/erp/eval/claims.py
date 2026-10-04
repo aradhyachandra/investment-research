@@ -21,7 +21,6 @@ cited passages. Template answers (code-written quotes) have none. These are labe
 (qualitative.py), never graded here.
 """
 import re
-from decimal import Decimal
 
 from pydantic import BaseModel
 
@@ -165,6 +164,3 @@ def extract_claims(answer: Answer, cfg: dict | None = None) -> tuple[list[Numeri
             qualitative.append(QualitativeClaim(text=s, cited=cited, cited_by=how if cited else "none"))
     return numeric, qualitative
 
-
-def numeric_value(claim: NumericClaim) -> Decimal:
-    return Decimal(claim.value)

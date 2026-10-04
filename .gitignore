@@ -12,3 +12,6 @@ data/chroma/
 # Eval run outputs (M7): contain annual-report excerpts and results on unverified data.
 # Kept local until the author decides what to publish (M9).
 eval/results/
+
+# Local Claude Code settings (machine-specific)
+.claude/

@@ -1,5 +1,86 @@
 # PROGRESS
 
+## 2026-10-04 — M9: README, results table, demo script, cleanup
+
+**Done**
+- `README.md` per plan Section 12 (13 sections). Top: not investment advice; v1 TCS only; "AI
+  interprets, code calculates, sources prove". Section 8 "How this was built and what is not
+  verified" (gold drafting and sign-off status read from `entered_by`, AI-drafted DCF assumptions with
+  no finance review, DCF gold = engine output, qwen2.5:3b licence TO VERIFY, known weaknesses,
+  PyMuPDF AGPL TO VERIFY, no author notes yet). Setup section with a "can / cannot reproduce without
+  the PDFs and Ollama" table.
+- `scripts/make_results_table.py` + `src/erp/eval/results_table.py`: results block generated from
+  `eval/results/` (newest finished run per split; full / verifier off / naive RAG; "k of n";
+  provenance with dirty-tree flag, unverified facts, pending gold, questions-file hash warning).
+  `--readme` rewrites the marked block. Test split prints "Test split not yet run."
+  Tests: `tests/test_results_table.py` (5).
+- `scripts/clean_clone_check.sh` (clone or `--worktree` copy -> venv -> pip install -> pytest ->
+  sample DB -> UI `--demo` headless + one AppTest render). Run on the final tree: see below.
+- `docs/DEMO.md`: 5-question walkthrough (EV-A01, EV-C01, EV-D04, EV-E01, EV-G01) + optional failure
+  (EV-E04). No screenshots (headless Chrome caught only the loading skeleton).
+- Cleanup: removed unused `numeric_value` (eval/claims.py, + its `Decimal` import) and
+  `embedding_model_name` (ingest/embed.py); `.claude/` added to `.gitignore`; `AGENTS.md` synced with
+  `CLAUDE.md` (missing ANTHROPIC_API_KEY line).
+- Tests: 620 passing in the working repo.
+
+**M9 acceptance (plan Section 9)**
+- README complete per Section 12: yes (screenshots missing; see flags).
+- Clean-clone setup from the README alone: `scripts/clean_clone_check.sh --worktree` on the final
+  tree: copy has no data/raw, data/db, data/chroma, eval/results or .env; pip install + `pip check`
+  clean; 615 passed, 5 skipped (the 5 need the real PDFs); sample DB builds (12 facts, 12 not
+  verified); UI healthy in `--demo`; page renders and shows "no saved eval runs" (expected; README
+  says so). Only macOS + Python 3.13.5 tested.
+
+**Privacy / secrets scan (everything `git add -A` would commit, plus git history)**
+- Tokens/keys (sk-, ghp_, AKIA, hf_, private keys, key=... literals): none found.
+- `ANTHROPIC_API_KEY`: only in instructions telling not to set it.
+- Absolute home paths (/Users/, /home/, /var/folders, /private/tmp): none in files to be committed.
+  They do appear in `eval/results/*/run.json` (gitignored) and in the clean-clone temp paths.
+- Emails: none in files. Commit metadata in all 14 commits uses the author's own address
+  (aradhyachandra5@gmail.com); decide if that is the public one before pushing.
+- One commit message (5d29315) carries a `Claude-Session:` link to a claude.ai session. Not a secret,
+  but it will be public with the history.
+- Annual-report text: no extracts committed. Paraphrases with figures and page numbers are in
+  `eval/questions.jsonl`, `tests/provisional_retrieval_probes.jsonl`, `dcf_inputs.yaml` rationales
+  and NOTES.md (short quotes of one or two sentences, e.g. the "no single customer ... 10%" line).
+  The PDFs, chunks, Chroma index and eval results (which hold chunk text) are all gitignored.
+- `data/sample/facts_sample.csv` (12 AI-read figures) is tracked; plan Section 10 leaves "may it be
+  public" open.
+- Untracked-and-ignored on disk only: `data/raw/` (with its own .git), `data/db/`, `data/chroma/`,
+  `data/sample/generated/`, `eval/results/`, `.venv/`, `.DS_Store`, `.claude/`.
+
+**Decisions**
+- Followed the brief over plan 2.5 for the results block, with an explicit "plumbing check, not a
+  headline" label (NOTES.md M9). Author decides whether it stays in the public README.
+- DEMO uses the DCF terminal-value share, not the per-share value, so no per-share figure is the
+  thing on screen.
+- README disclaimers name the excluded outputs in negated form ("no price targets, no valuation
+  verdicts"); no buy/sell/hold wording.
+- Did not delete `FIRST_SESSION_PROMPT.md` or edit `PROJECT_PLAN.md`'s stale "repo is empty" header:
+  both are the author's files.
+
+**Known issues / flags for the author**: see "What to review" below and NOTES.md (M9).
+
+**What to review before committing**
+1. README section 7: keep the dev results block public, or show "not yet run" until the test split?
+2. README section 8: every statement about sign-off and review status, in your own words.
+3. Re-run the dev eval on committed code, then `scripts/make_results_table.py --readme`.
+4. Commit email and the session link in the history, before the repo goes public.
+5. Licence: choose one (PyMuPDF AGPL-3.0; qwen2.5:3b licence) and record the PDF URLs.
+6. Screenshots from `--demo` if you want them in the README.
+7. `FIRST_SESSION_PROMPT.md`: keep in the public repo or remove.
+
+**Next**
+- Author review, then commit (nothing committed). After that, Phase 0 items (fact verification,
+  hand DCF + golden test, gold sign-off, author's report) and the one test-split run.
+
+**How to run**
+```
+PYTHONPATH=src .venv/bin/python scripts/make_results_table.py
+PYTHONPATH=src .venv/bin/python scripts/make_results_table.py --readme
+scripts/clean_clone_check.sh --worktree
+```
+
 ## 2026-10-04 — M8: Streamlit UI
 
 **Done**

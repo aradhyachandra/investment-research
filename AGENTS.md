@@ -18,7 +18,7 @@ Core principle: **AI interprets, code calculates, sources prove.**
 - **Never invent** financial figures, assumptions, page numbers or sources. If something is missing, say so.
 - **Do not edit** `eval/questions.jsonl`, anything in `data/manual/`, `data/sample/`, or `dcf_inputs.yaml` unless the author asks.
 - **No network scraping.** Data comes from files the author placed in `data/`.
-- **Never commit** anything from `data/raw/` (private data repo checkout) or any secret. Secrets go in `.env` (gitignored).
+- **Never commit** anything from `data/raw/` (private data repo checkout) or any secret. Secrets go in `.env` (gitignored). Do not set or use `ANTHROPIC_API_KEY`.
 - LLM-generated notes live only in `data/sample/generated/` and never enter SQLite, the eval, or the public repo.
 - The runtime LLM is called through **one function**, model name from config.
 - Company-specific details (metrics, units, assumptions, valuation method) go in config files, not code.
