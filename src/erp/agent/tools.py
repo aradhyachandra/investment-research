@@ -98,6 +98,12 @@ class ToolNumber(BaseModel):
     period: str | None
     basis: str | None
     evidence_id: str
+    # For the verifier (M6): what the figure measures, so prose like "net margin fell" can be
+    # checked against the right numbers. quantity = metric_id, ratio_id or DCF field.
+    quantity: str | None = None
+    measures_change: bool = False     # a growth rate: its sign is the direction of change
+    variant: bool = False             # a sensitivity-grid value, not the scenario's own figure
+    conditions: dict[str, float] = {}  # grid cells: the WACC and terminal growth (percent) it assumes
 
 
 class Passage(BaseModel):
@@ -139,10 +145,12 @@ def format_number(value: float, unit: str, display: dict) -> str:
     return template.format(v=f"{value:,.{decimals}f}")
 
 
-def _number(evidence_id, field, label, value, unit, period, basis, display) -> ToolNumber:
+def _number(evidence_id, field, label, value, unit, period, basis, display, *, quantity=None,
+            measures_change=False, variant=False) -> ToolNumber:
     return ToolNumber(number_id=f"{evidence_id}#{field}", label=label, value=value, unit=unit,
                       display=format_number(value, unit, display), period=period, basis=basis,
-                      evidence_id=evidence_id)
+                      evidence_id=evidence_id, quantity=quantity, measures_change=measures_change,
+                      variant=variant)
 
 
 def _metric_names(conn) -> dict:
@@ -173,7 +181,7 @@ def _fact_tool(a: FactArgs, env: ToolEnv) -> ToolResult:
     name = _metric_names(env.conn).get(f.metric_id, f.metric_id)
     ev = _fact_evidence(f)
     num = _number(ev.evidence_id, "value", f"{name}, {f.period_label} ({f.basis})", f.value, f.unit,
-                  f.period_label, f.basis, env.display)
+                  f.period_label, f.basis, env.display, quantity=f.metric_id)
     notes = _unverified_note([f]) + [
         f"{f.period_label} runs from {f.period_start.isoformat()} to {f.period_end.isoformat()} "
         f"(fiscal year, not calendar year)."]
@@ -192,11 +200,13 @@ def _ratio_tool(a: RatioArgs, env: ToolEnv) -> ToolResult:
         period=r.period_label, basis=r.basis, verified=r.verified, formula=r.formula,
         input_evidence_ids=[e.evidence_id for e in fact_evs])
     numbers = [_number(calc_id, "value", f"{r.display_name}, {r.period_label} ({r.basis})", r.value, r.unit,
-                       r.period_label, r.basis, env.display)]
+                       r.period_label, r.basis, env.display, quantity=r.ratio_id,
+                       measures_change=load_ratios()[r.ratio_id]["kind"] == "yoy_growth")]
     for i, ev in zip(r.inputs, fact_evs):
         f = i.fact
         numbers.append(_number(ev.evidence_id, "value", f"{names.get(f.metric_id, f.metric_id)}, {f.period_label} "
-                               f"({f.basis}; input '{i.role}')", f.value, f.unit, f.period_label, f.basis, env.display))
+                               f"({f.basis}; input '{i.role}')", f.value, f.unit, f.period_label, f.basis, env.display,
+                               quantity=f.metric_id))
     return ToolResult(tool="compute_ratio", args=a.model_dump(), ok=True, numbers=numbers,
                       evidence=[calc_ev, *fact_evs],
                       notes=[f"Definition: {load_ratios()[r.ratio_id]['definition']}", *_unverified_note(facts)],
@@ -220,8 +230,11 @@ def _dcf_tool(a: DCFArgs, env: ToolEnv) -> ToolResult:
                      f"{Path(env.dcf_assumptions).name}",
         period=period, note="Valuation date shown as period. Basis as stated in the assumptions file.")
 
-    def n(field, label, value, unit):
-        return _number(dcf_id, field, label, value, unit, period, None, env.display)
+    def n(field, label, value, unit, quantity=None, variant=False, conditions=None):
+        num = _number(dcf_id, field, label, value, unit, period, None, env.display,
+                      quantity=quantity or field, variant=variant)
+        num.conditions = conditions or {}
+        return num
 
     # Rates are stored as decimals; code converts them to percent for display.
     numbers = [
@@ -236,11 +249,17 @@ def _dcf_tool(a: DCFArgs, env: ToolEnv) -> ToolResult:
                          "PERCENT"))
     if a.include_sensitivity:
         g = d.sensitivity
+        # The grid's WACC and growth values are numbers too, so prose may quote them.
+        numbers += [n(f"sensitivity_wacc_{i}", "WACC used in the sensitivity grid", w * 100, "PERCENT",
+                      "wacc", True) for i, w in enumerate(g.wacc_values)]
+        numbers += [n(f"sensitivity_growth_{j}", "Terminal growth used in the sensitivity grid", gr * 100,
+                      "PERCENT", "terminal_growth", True) for j, gr in enumerate(g.growth_values)]
         for i, w in enumerate(g.wacc_values):
             for j, gr in enumerate(g.growth_values):
                 if g.value_per_share[i][j] is not None:
                     numbers.append(n(f"sensitivity_{i}_{j}", f"Value per share at WACC {w * 100:.2f}% and "
-                                     f"terminal growth {gr * 100:.2f}%", g.value_per_share[i][j], d.per_share_unit))
+                                     f"terminal growth {gr * 100:.2f}%", g.value_per_share[i][j], d.per_share_unit,
+                                     "value_per_share", True, {"wacc": w * 100, "terminal_growth": gr * 100}))
     notes = [d.disclaimer, f"Scenario label: {d.label}."]
     notes += [f"Check {c.check_id}: {c.status} ({c.detail})" for c in d.checks if c.status != "pass"]
     return ToolResult(tool="run_dcf", args=a.model_dump(), ok=True, numbers=numbers, evidence=[ev], notes=notes,

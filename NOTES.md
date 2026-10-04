@@ -2,6 +2,78 @@
 
 Open questions, TO VERIFY items, and validation TODOs. Newest first.
 
+## M6 verifier, refusals, retrieval (2026-10-04)
+
+**Verifier (`src/erp/agent/verifier.py`): TO VERIFY / decide**
+- **Strict by design.** Any error -> the code-written template answer. On the two live runs of the
+  20 PROVISIONAL dev questions, 1 of 17 answered questions was rejected each time (PDEV-13, both real
+  slips); 0 false rejections. Expect more false rejections on the author's own questions; each one
+  costs a template answer, never a wrong number. Review the rejection rate in M7.
+- **Rounding rule.** A written number matches a tool number if it equals the tool value rounded to
+  the decimals written (18.43% -> "18.4%" or "18%" pass; "267,000 crore" for 267,021 fails). More
+  decimals than displayed only with trailing zeros. Rounding to whole percent is allowed: is that too
+  loose for the eval's "exact match after rounding to the stated precision"? Author to decide.
+- **Digit grouping.** Both 267,021 and 2,67,021 are accepted, so the display choice (international
+  grouping, M5) can be changed without touching the verifier.
+- **Units.** A crore figure written as "million", "lakh crore", "billion" fails (the LLM may not
+  convert). A figure with no unit written is matched on value alone (TO VERIFY: could let a bare
+  "49,210" pass where the unit is ambiguous).
+- **Numbers from passages** (e.g. "ISO 27001", "10% or more of revenue") are allowed with a
+  warning, because passages are filing text the answer cites. Passage numbers are not checked
+  figures (plan: numbers come from SQLite). Decide whether these should block.
+- **Years and dates.** Period labels (FY26, FY 2025-26, fiscal 2026, 2025-26) are not figures. Dates
+  (31 March 2026, April 1, 2025, March 2025) must appear in the tool results (period dates in the
+  fact notes, valuation date, passage text). A bare year not in the tool data is a warning.
+- **Page numbers** after "page"/"p." must be pages (PDF index or printed label) of the evidence.
+- **Spelled-out numbers** ("three interim dividends") are not checked.
+- **Comparison words** are a fixed list in code (increased, rose, fell, higher, lower, ...). "grow"
+  as a bare verb is left out of the general check on purpose ("TCS aims to grow revenue" is not a
+  comparison); it is checked in "grows to X". Quantity names come from tool labels plus
+  `verifier.quantity_aliases` in `config/agent.yaml` ("profit" maps to two metrics; a comparison is
+  checked on the first that has figures).
+- **"Higher than" order.** "X in FY26 was lower than in FY25" compares the periods before and
+  after "than"; "decreased from FY25 to FY26" and "declined in FY26" compare chronologically
+  (one period mentioned -> compared with the prior year, which must be in the tool results).
+- **DCF sensitivity.** "WACC increases to 13.92%" is checked against the scenario's own WACC; "the
+  value falls to X" against the base value; and a grid value must be the cell for the WACC/growth
+  the clause (or sentence) states, with an unstated input at its base value. A conceptual sentence
+  with no figure ("the value falls as WACC rises") is not checked when a grid was returned (TO VERIFY).
+- **Citation support.** A bracketed `[id]` must be the evidence of the figures in its sentence, a
+  calculation that used them, or one of its inputs. The live model almost never writes `[id]`
+  (citations are attached by code anyway), so this is mostly a warning today.
+- **Not built:** checking that a cited chunk's text supports a qualitative claim (plan risk 6, key-term
+  heuristic); claims that use spelled-out numbers; unit/period checks inside passages.
+
+**Refusal pre-check (`src/erp/agent/guardrails.py`)**
+- Live (qwen2.5:3b, router alone, no pre-check): the router ANSWERED "Is TCS undervalued?", "TCS vs
+  Infosys margins", "Does the DCF show TCS is undervalued?" and "Is the share price below the DCF
+  value per share?". Only the pattern pre-check refuses them. Keep it.
+- Patterns are in `config/agent.yaml` (`guardrails`), other-company names in
+  `config/companies/tcs.yaml`. Written against Claude's own phrasings: TO VERIFY on the author's
+  dev split. Known gap: "compare with the industry average" (router answered it; not refused).
+- A period after the latest data (facts or a document's `period_covered`; today Q1 FY27) is refused
+  as `outside_data` ("revenue in FY28" is a forecast). Earlier periods still go to the router.
+- Pre-check refusals carry a RoutePlan with the problem "refused by the pattern pre-check", so
+  end-to-end routing scores count them; `--route-only` still measures the router alone.
+
+**Retrieval investigation (time-boxed; no code changed)**
+- recall@5 on `tests/provisional_retrieval_probes.jsonl` (12 PROVISIONAL probes):
+  baseline 9 of 12 | strip the company name from the query 11 of 12 | keyword-overlap re-rank of a
+  wider pool: 11-12 of 12 depending on weight and pool size.
+- Not adopted: (1) stripping helps the probes, but the agent searches with the router's query, which
+  already leaves "TCS" out, and on the live wording of PDEV-15 it made things worse (PDF 24 dropped out
+  of the top 5); (2) the re-rank has two knobs and the best setting was picked on these same 12
+  probes, which is overfitting. Re-test both on the author's category E questions (P0.4).
+- Why client concentration misses: the sentence "No single customer represents 10% or more of the
+  Group's total revenue" (PDF 226) sits at the end of a table-heavy chunk (a geographic assets
+  table), so its embedding is dominated by numbers and it also gets the 0.85 table penalty. It is
+  not in the top 40. The real fix is chunking (split prose paragraphs out of table chunks).
+- Why dividends/buybacks failed live: the router rewrote the question as "return of surplus cash to
+  shareholders"; PDF 36 was still at rank 3, but the composer said "not available". The user's own
+  question finds PDF 24 at rank 1. Searching with both the router's query and the user's question
+  (merge by best score) fixed 3 of 3 live E questions in a quick check, but n = 3: not adopted, worth
+  testing in M7. PDF 24 also has broken glyph mapping ("diǀidends"), which hurts keyword matching.
+
 ## P0.6 model test (2026-10-04): runtime LLM = qwen2.5:3b
 
 Hardware: MacBook Air M2, 8 GB RAM. Ollama 0.34.2. All models at temperature 0, seed 0, num_ctx 8192.
@@ -55,9 +127,9 @@ built: the two-step router (v1) is the default, as the plan expects on 8 GB.
 - **Unsupported comparison (seen live, PDEV-17).** The router asked for FY26 net margin only; the
   composer still wrote "net margin decreased from FY25 to FY26" with no FY25 figure. No number was
   invented, but the claim is unsupported. The M6 verifier checks numbers; it should also catch
-  comparative words ("increased", "decreased", "higher") without both figures. Not built (M6).
+  comparative words ("increased", "decreased", "higher") without both figures. Done in M6 (comparison checks in the verifier).
 - **Dates in prose.** Period dates reach the composer as text ("2024-04-01 to 2025-03-31") and the
-  model rewrites them ("April 1, 2024"). The M6 verifier must treat dates as a separate case.
+  model rewrites them ("April 1, 2024"). Done in M6: dates are checked against the tool results.
 - **Advice-language guard** (`config/agent.yaml` `banned_phrases`) is a whole-word list. It can trip
   on harmless words ("cross-sell", "hold" as in "hold talks"); the cost is a template answer. "fair
   value" and "recommend" are left out on purpose (normal accounting/Board wording).

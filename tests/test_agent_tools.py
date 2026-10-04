@@ -148,7 +148,14 @@ def test_dcf_sensitivity_numbers_on_request(env):
     env.ticker = "TOY"
     r = call(env, "run_dcf", scenario="base", include_sensitivity=True)
     sens = [n for n in r.numbers if "#sensitivity_" in n.number_id]
-    assert sens and all(n.unit == "INR_PER_SHARE" and "WACC" in n.label for n in sens)
+    cells = [n for n in sens if n.quantity == "value_per_share"]
+    assert cells and all(n.unit == "INR_PER_SHARE" and "WACC" in n.label and n.variant for n in cells)
+    # M6: the grid's own WACC and growth values are numbers too (so prose quoting them can be verified)
+    axes = {n.quantity: sorted(round(x.value, 2) for x in sens if x.quantity == n.quantity) for n in sens
+            if n.quantity != "value_per_share"}
+    assert axes == {"wacc": [11.0, 11.5, 12.0, 12.5, 13.0], "terminal_growth": [3.0, 3.5, 4.0, 4.5, 5.0]}
+    base = {n.quantity: n for n in r.numbers if not n.variant}
+    assert base["wacc"].display == "12.00%" and base["value_per_share"].quantity == "value_per_share"
 
 
 def test_dcf_without_assumptions_file_is_an_error(env, tmp_path):

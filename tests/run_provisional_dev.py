@@ -69,7 +69,11 @@ def main():
                 print(f"   answer ({answer.composed_by}): {answer.answer_text[:400]!r}")
                 print(f"   numbers_used: {[(n.display, n.evidence_id) for n in answer.numbers_used]}")
                 print(f"   citations: {[(c.evidence_id, c.page, c.period, c.basis) for c in answer.citations][:8]}")
-                if answer.warnings:
+                if answer.verification is not None:
+                    v = answer.verification
+                    print(f"   verifier: {'ok' if v.ok else 'REJECTED'}; "
+                          + "; ".join(f"{i.severity} {i.check}: {i.span!r}" for i in v.issues))
+                elif answer.warnings:
                     print(f"   warnings: {answer.warnings}")
                 if out:
                     out.write(json.dumps({"id": q["id"], "model": model, "seconds": round(took, 1),

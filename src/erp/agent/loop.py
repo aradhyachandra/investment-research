@@ -5,9 +5,11 @@
   3. compose: the LLM writes the answer from the tool output only, and lists which number ids and
               evidence ids it used, chosen from enums of the ids it was given.
 
-Code, not the LLM, decides: refusals (fixed texts), what counts as a number used (ids from tool
-results), citations (evidence of those numbers and their inputs, plus cited chunks), and the
-fallback answer when the LLM's reply cannot be used (a template built from the tool results).
+Code, not the LLM, decides: refusals (fixed texts; a pattern pre-check runs before the router),
+what counts as a number used (the tool numbers the verifier finds in the text), citations
+(evidence of those numbers and their inputs, plus cited chunks), and the fallback answer when
+the LLM's reply cannot be used or fails the verifier (a template built from the tool results).
+Answers that used run_dcf end with a fixed footer line added by code.
 No arithmetic happens in the LLM: every figure it sees is already formatted by code.
 
 CLI:  PYTHONPATH=src .venv/bin/python -m erp.agent.loop "What was TCS's revenue in FY26?"
@@ -19,9 +21,11 @@ import sqlite3
 import sys
 
 from erp.agent.answer_schema import Answer
+from erp.agent.guardrails import latest_period, other_company_names, precheck
 from erp.agent.llm import LLMError, call_llm, load_agent_config
 from erp.agent.router import RoutePlan, build_catalog, route
 from erp.agent.tools import ToolEnv, ToolResult, run_tool
+from erp.agent.verifier import verify_answer
 from erp.config import REPO
 
 # Fixed refusal texts, written by code. They describe what the tool can do instead.
@@ -143,8 +147,26 @@ def _refusal(question, env, plan, reason, text, results=(), limitations=(), mode
                   limitations=list(limitations), composed_by="refusal", model=model)
 
 
+def _with_dcf_footer(text: str, results: list[ToolResult], cfg: dict) -> str:
+    """Fixed last line for any answer that used run_dcf. Added by code after verification, so
+    the LLM cannot remove or edit it (an LLM-written copy is taken out to avoid a duplicate)."""
+    if not any(r.tool == "run_dcf" and r.ok for r in results):
+        return text
+    footer = " ".join(cfg["dcf_footer"].split())
+    return f"{text.replace(footer, '').rstrip()}\n\n{footer}"
+
+
 def answer_question(question: str, env: ToolEnv, llm_fn=call_llm, *, cfg: dict | None = None) -> Answer:
     cfg = cfg or load_agent_config()
+
+    # 0. refusal pre-check: fixed patterns and a future-period check, no LLM (guardrails.py)
+    reason = precheck(question, cfg["guardrails"], other_company_names(env.ticker),
+                      latest_period(env.conn, env.ticker))
+    if reason:
+        plan = RoutePlan(question_type="out_of_scope", refusal_reason=reason, refuse=True,
+                         problems=["refused by the pattern pre-check (guardrails.py); the router was not called"])
+        return _refusal(question, env, plan, reason, REFUSAL_TEXT[reason])
+
     catalog = build_catalog(env.conn, env.ticker, env.dcf_assumptions)
 
     # 1. route
@@ -179,6 +201,17 @@ def answer_question(question: str, env: ToolEnv, llm_fn=call_llm, *, cfg: dict |
     except (LLMError, json.JSONDecodeError) as e:
         data, text = {}, ""
         warnings.append(f"composer reply unusable ({type(e).__name__}: {str(e)[:200]}); template answer used")
+    if not isinstance(data, dict):
+        data = {}
+
+    def template(report=None):
+        return Answer(question=question, ticker=env.ticker,
+                      answer_text=_with_dcf_footer(template_answer(ok, failures), ok, cfg),
+                      numbers_used=list(all_numbers.values()),
+                      citations=_cite(ok, [n.evidence_id for n in all_numbers.values()] + chunk_ids),
+                      refused=False, route=plan, tool_results=results, limitations=limitations,
+                      composed_by="template", model=model, warnings=warnings, verification=report,
+                      rejected_text=text or None)
 
     banned = _banned(text, cfg["banned_phrases"])
     if banned:
@@ -186,35 +219,28 @@ def answer_question(question: str, env: ToolEnv, llm_fn=call_llm, *, cfg: dict |
     if not text.strip() or banned:
         if text.strip() == "" and not warnings:
             warnings.append("composer gave no answer text; template answer used")
-        return Answer(question=question, ticker=env.ticker, answer_text=template_answer(ok, failures),
-                      numbers_used=list(all_numbers.values()),
-                      citations=_cite(ok, [n.evidence_id for n in all_numbers.values()] + chunk_ids),
-                      refused=False, route=plan, tool_results=results, limitations=limitations,
-                      composed_by="template", model=model, warnings=warnings)
+        return template()
 
-    used_ids = [i for i in data.get("used_number_ids") or [] if isinstance(i, str)]
-    unknown = [i for i in used_ids if i not in all_numbers]
-    if unknown:
-        warnings.append(f"composer listed number ids not in the tool results, dropped: {unknown}")
-    numbers_used = [all_numbers[i] for i in dict.fromkeys(used_ids) if i in all_numbers]
-    if not numbers_used and all_numbers:
-        warnings.append("composer did not list the numbers it used; all tool numbers attached")
-        numbers_used = list(all_numbers.values())
-
-    known_evidence = {e.evidence_id for r in ok for e in r.evidence}
+    # 4. verify the LLM's text against the tool results (verifier.py); any error -> template
+    listed = [i for i in data.get("used_number_ids") or [] if isinstance(i, str)]
     cited = [i for i in data.get("cited_evidence_ids") or [] if isinstance(i, str)]
-    bad_cites = [i for i in cited if i not in known_evidence]
-    if bad_cites:
-        warnings.append(f"composer cited ids not in the tool results, dropped: {bad_cites}")
+    report = verify_answer(text, ok, cfg=cfg, listed_number_ids=listed, cited_ids=cited)
+    warnings += [f"verifier {i.severity} ({i.check}): {i.message}" for i in report.issues]
+    if not report.ok:
+        warnings.append(f"verifier rejected the composed text ({len(report.errors)} error(s)); template answer used")
+        return template(report)
+
+    numbers_used = report.numbers_in_text
+    known_evidence = {e.evidence_id for r in ok for e in r.evidence}
     cited_chunks = [i for i in cited if i in chunk_ids]
     if chunk_ids and not cited_chunks:
         warnings.append("composer cited no passage; all passages it was given are attached")
         cited_chunks = chunk_ids
     citations = _cite(ok, [n.evidence_id for n in numbers_used]
                       + [i for i in cited if i in known_evidence and i not in chunk_ids] + cited_chunks)
-    return Answer(question=question, ticker=env.ticker, answer_text=text, numbers_used=numbers_used,
-                  citations=citations, refused=False, route=plan, tool_results=results, limitations=limitations,
-                  composed_by="llm", model=model, warnings=warnings)
+    return Answer(question=question, ticker=env.ticker, answer_text=_with_dcf_footer(text, ok, cfg),
+                  numbers_used=numbers_used, citations=citations, refused=False, route=plan, tool_results=results,
+                  limitations=limitations, composed_by="llm", model=model, warnings=warnings, verification=report)
 
 
 # ---------- CLI ----------

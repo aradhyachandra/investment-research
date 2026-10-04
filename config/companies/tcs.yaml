@@ -100,3 +100,27 @@ reporting_rounding:
   INR_CRORE: 1
   INR_MILLION: 1
   INR_PER_SHARE: 0.01
+
+# Refusal pre-check (M6, src/erp/agent/guardrails.py): v1 covers TCS only, so a question naming
+# one of these companies is refused as "other_company" before the router runs. A backstop, not a
+# complete list: the router refuses other companies too. Whole words, case-insensitive.
+# Not listed on purpose: Tata Sons and other Tata group names (TCS's promoter and related parties
+# appear in TCS's own filings, e.g. dividends paid to Tata Sons).
+guardrails:
+  other_company_names:
+    - Infosys
+    - Infy
+    - Wipro
+    - HCLTech
+    - HCL Technologies
+    - HCL Tech
+    - Tech Mahindra
+    - LTIMindtree
+    - LTI Mindtree
+    - Mphasis
+    - Persistent Systems
+    - Coforge
+    - Accenture
+    - Cognizant
+    - Capgemini
+    - IBM

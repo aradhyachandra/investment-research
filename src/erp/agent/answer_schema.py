@@ -1,10 +1,10 @@
 """The structured Answer the agent returns (plan 8.3, simplified for M5).
 
-Every figure in `numbers_used` is a ToolNumber copied from a tool result, never parsed from
-the LLM's text; each points at an evidence_id that is listed in `citations`.
-The verifier (M6) will add the check that every number written in `answer_text` is one of
-these. Until then, `answer_text` is the LLM's prose held to the tool output by the prompt,
-the constrained id lists and the advice-language guard only.
+Every figure in `numbers_used` is a ToolNumber copied from a tool result; each points at an
+evidence_id that is listed in `citations`. Since M6 the verifier (verifier.py) checks that every
+number written in `answer_text` is one of the tool numbers, and `numbers_used` is the list of
+tool numbers the text actually says. If the verifier finds an error, `answer_text` is the
+code-written template instead of the LLM's prose (`composed_by = "template"`).
 """
 from typing import Literal
 
@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from erp.agent.router import RoutePlan
 from erp.agent.tools import Evidence, ToolNumber, ToolResult
+from erp.agent.verifier import VerifierReport
 
 DISCLAIMER = ("Illustrative analysis of published filings and stated assumptions. "
               "Not investment advice.")
@@ -23,7 +24,7 @@ class Answer(BaseModel):
     question: str
     ticker: str
     answer_text: str
-    numbers_used: list[NumberUsed]   # each points at an evidence_id in citations
+    numbers_used: list[NumberUsed]   # the tool numbers the text says; each points at a citation
     citations: list[Evidence]        # sources, pages, periods, bases, formulas, DCF runs
     refused: bool
     refusal_reason: str | None = None
@@ -33,4 +34,6 @@ class Answer(BaseModel):
     composed_by: Literal["llm", "template", "refusal"]
     model: str | None = None         # runtime LLM name as Ollama reports it
     warnings: list[str] = []         # what the code had to correct in the LLM's output
+    verification: VerifierReport | None = None   # the verifier's report on the LLM's text (M6)
+    rejected_text: str | None = None  # the LLM's text when it was replaced by the template (for review)
     disclaimer: str = DISCLAIMER

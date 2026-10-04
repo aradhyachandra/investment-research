@@ -50,7 +50,7 @@ display:
 # Matched as whole words, case-insensitive. This is a guard list, not prompt text.
 # Left out on purpose: "fair value" and "recommend(ed)" (normal accounting / Board wording, e.g.
 # "the Board recommended a final dividend"). Whole-word matching still trips on e.g. "cross-sell";
-# the template fallback is the safe cost of that. TO VERIFY: a fuller check belongs to the M6 verifier.
+# the template fallback is the safe cost of that. Verdict questions are refused before routing (`guardrails`, M6).
 banned_phrases:
   - buy
   - sell
@@ -62,3 +62,68 @@ banned_phrases:
   - outperform
   - underperform
   - accumulate
+
+# Fixed line added by code (not the LLM) to the end of every answer that used run_dcf (M6).
+# The LLM never sees or writes it, so it cannot remove or edit it. Update the wording if the
+# assumptions' provenance changes (e.g. after a finance-partner review).
+dcf_footer: >-
+  Illustrative value implied by the stated assumptions, which were drafted with AI assistance;
+  not a prediction or investment advice.
+
+# Refusal pre-check (M6, src/erp/agent/guardrails.py). Runs before the router, no LLM.
+# Regular expressions, case-insensitive; the first reason with a matching pattern wins (in this
+# order). Each reason must have a fixed refusal text in loop.py. Other-company names live in the
+# company config (config/companies/<ticker>.yaml, guardrails.other_company_names).
+# Kept narrow on purpose: legitimate questions ("what does the DCF imply", "did TCS buy back
+# shares") must pass; the router's own refusal is the second line. TO VERIFY on the author's
+# dev split (P0.4): these were written against Claude's own test phrasings.
+guardrails:
+  investment_advice:
+    - '\b(undervalued|overvalued|under-valued|over-valued|fairly valued|mispriced)\b'
+    - '\b(target price|price target)\b'
+    - '\b(should|shall|must|can|could)\s+(i|we|one|investors?)\b.*\b(buy(?![\s-]*backs?\b)|sell|hold|invest|exit|accumulate|book profits?)\b'
+    - '\b(would|do) you (buy|sell|hold|invest|own|recommend|suggest)\b'
+    - '\bis (tcs|it|the stock|this stock|the share) an? (good |strong )?(buy|sell|hold)\b'
+    - '\b(good|great|safe|bad) (investment|stock|share|buy|bet)\b'
+    - '\bgood time to (buy|sell|invest|enter|exit)\b'
+    - '\bworth (buying|investing|owning|holding|it)\b'
+    - '\b(stock|shares?|tcs) (is |are )?(cheap|expensive)\b'
+    - '\b(share|stock|market) price\b.*\b(dcf|intrinsic|fair) value\b'
+    - '\b(dcf|intrinsic|fair) value\b.*\b(share|stock|market) price\b'
+  price_prediction:
+    - '\bwill\b.*\b(hit|reach|cross|touch|go up|go down|crash|rally|double|triple)\b'
+    - '\b(share|stock) price\b.*\b(will|next|future|forecast|predict|expect|tomorrow|a year from now|in a year)\b'
+    - '\bwill\b.*\b(share|stock) price\b'
+    - '\b(predict|forecast|projection of)\b.*\b(price|stock|shares)\b'
+    - '\bwill (tcs|it|the stock|the shares?) (go|move|rise|fall|gain|drop|climb)\b'
+
+# Answer verifier (M6, src/erp/agent/verifier.py). Deterministic checks of the composed text
+# against the tool results; any error means the code-written template answer is used instead.
+verifier:
+  # Extra words that name a quantity in prose, keyed by metric_id / ratio_id / DCF field.
+  # The display name of each tool number (e.g. "Net margin") is always used as well.
+  # Used to tell which figures a sentence like "net margin fell" is about.
+  quantity_aliases:
+    revenue_from_operations: [revenue, revenues, sales, top line]
+    profit_after_tax: [profit after tax, pat, profit for the year, net profit, profit]
+    profit_attributable_to_owners: [net profit, profit attributable, profit, net income, earnings]
+    eps_basic: [eps, earnings per share]
+    eps_diluted: [diluted eps]
+    total_equity: [equity, shareholders' funds, net worth]
+    cash_and_equivalents: [cash]
+    net_margin: [net margin, net profit margin, margin, profitability]
+    revenue_growth_yoy: [revenue growth]
+    net_profit_growth_yoy: [profit growth, net profit growth]
+    eps_growth_yoy: [eps growth]
+    value_per_share: [value per share, per-share value, dcf value, intrinsic value]
+    enterprise_value: [enterprise value, ev]
+    equity_value: [equity value]
+    wacc: [wacc, discount rate, cost of capital]
+    terminal_growth: [terminal growth, long-term growth, perpetual growth]
+    tv_share_of_ev: [terminal value share, share of enterprise value]
+  # Words that judge rather than report. Flagged as warnings (never blocking) when the sentence
+  # has no tool figure and the word is not in a passage the answer was given.
+  interpretive_words: [stable, significant, significantly, strong, strongly, robust, healthy, solid,
+                       weak, impressive, sharp, sharply, substantial, substantially, remarkable,
+                       resilient, steady, modest, modestly, slight, slightly, marginal, marginally,
+                       massive, dramatic, dramatically, excellent, poor, superior]

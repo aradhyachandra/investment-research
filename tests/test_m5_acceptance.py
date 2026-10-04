@@ -13,6 +13,7 @@ DCF: the TOY fixture with its ticker set to TCS (made-up numbers, NOT a TCS valu
 the real assumptions file (data/manual/dcf_inputs.yaml, P0.3) does not exist yet.
 """
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -49,7 +50,9 @@ def env(loaded, tmp_path):
 
 
 def gold_route_llm(q):
-    """Returns the expected route; the composer lists every number and evidence id offered."""
+    """Returns the expected route. The composer writes each offered figure exactly as displayed,
+    with its evidence id in brackets, and lists every number and evidence id offered.
+    (Since M6 the verifier derives numbers_used from the text, so the text must contain figures.)"""
     exp = q["expected_route"]
     route = {"question_type": "out_of_scope" if exp["refuse"] else "numeric",
              "refusal_reason": exp["refusal_reason"] or "none",
@@ -63,7 +66,10 @@ def gold_route_llm(q):
 
         def offered(field):          # an empty choice is sent as {"maxItems": 0}, without items
             return props[field].get("items", {}).get("enum", [])
-        return json.dumps({"answer_text": "Answer written from the tool results only.",
+        figures = re.findall(r"^- \[([^\]#]+)#[^\]]+\] ([^:\n]+): (.+)$", messages[-1]["content"], re.M)
+        text = " ".join(f"{label}: {shown} [{eid}]." for eid, label, shown in figures) or \
+            "Answer written from the passages only."
+        return json.dumps({"answer_text": text,
                            "used_number_ids": offered("used_number_ids"),
                            "cited_evidence_ids": offered("cited_evidence_ids")})
     return ScriptedLLM(reply)

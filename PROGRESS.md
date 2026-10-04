@@ -1,5 +1,100 @@
 # PROGRESS
 
+## 2026-10-04 — M6: verifier, refusal handling, DCF footer; retrieval investigated
+
+**Done**
+- `src/erp/agent/verifier.py`: `verify_answer(text, tool_results, cfg, listed_number_ids, cited_ids)
+  -> VerifierReport` (ok, issues with check/severity/span/message, numbers_in_text). Deterministic,
+  no LLM. Checks: every number is a tool number (formatting and rounding as displayed allowed; unit
+  changes not); dates and page numbers must be in the tool results; passage-only numbers are warnings;
+  cited ids exist and back the figure in their sentence; comparisons ("increased", "fell", "higher
+  than", "from X to Y", "decreases to Y") need both values in the tool results and the right
+  direction; DCF grid values must be the cell for the WACC/growth the sentence states; judgement
+  words ("stable", "strong") with no figure are warnings.
+- Loop (`loop.py`): verifier runs on the composed text; any error -> the code-written template
+  answer, with the report in `Answer.verification`, a summary in `warnings`, and the rejected text in
+  `Answer.rejected_text` (never shown). `numbers_used` is now the tool numbers the text actually says
+  (fixes M5's "numbers_used lists figures the text never mentions").
+- Fixed DCF footer, added by code to every answer that used `run_dcf` (LLM and template paths):
+  "Illustrative value implied by the stated assumptions, which were drafted with AI assistance; not a
+  prediction or investment advice." Text in `config/agent.yaml` (`dcf_footer`).
+- Refusal pre-check (`src/erp/agent/guardrails.py`), before the router, no LLM: advice/verdict and
+  price-prediction patterns (`config/agent.yaml` `guardrails`), other-company names
+  (`config/companies/tcs.yaml` `guardrails.other_company_names`), and any period after the latest
+  data (-> `outside_data`). Fixed refusal texts as before; the router's refusal stays as a second line.
+- Tool numbers now carry `quantity`, `measures_change`, `variant`, `conditions` (for the verifier);
+  the DCF sensitivity output also lists the grid's WACC and growth values as numbers.
+- Runners: `tests/run_guardrail_phrasings.py` (pre-check vs router, live); `run_provisional_dev.py`
+  prints the verifier result.
+- Tests: 504 passing (118 new): `test_verifier.py`, `test_guardrails.py`, `test_m6_acceptance.py`.
+
+**M6 acceptance (plan Section 9)**
+- Injected bad numbers (typo, wrong unit, converted unit, LLM arithmetic), bad citations (unknown id
+  in text or lists, citation to the wrong figure), unsupported and wrong-direction comparisons, the
+  "decreases to 5.00%" slip and a grid value for the wrong conditions: all caught in tests, end to
+  end through the loop (template answer shipped, report recorded).
+- Guardrail questions (category G) on dev: PDEV-18/19/20 refused with the fixed texts, deterministic
+  (even with a router scripted never to refuse) and live. "Dev" = the PROVISIONAL questions
+  (`eval/questions.jsonl` still does not exist).
+- Live, qwen2.5:3b, 20 PROVISIONAL dev questions, three runs: routing 20 of 20 each time; verifier
+  passed 16 of 17 answered questions each time and rejected PDEV-13 each time, every rejection a real
+  slip (run 1: "terminal growth decreases to 5.00%" = unchanged; runs 2-3: grid values quoted for the
+  wrong WACC/growth, e.g. "decreasing terminal growth ... increases the value per share to INR
+  1,973.62", which is the cell where WACC also fell). No false rejections seen. One run's PDEV-13
+  composer call timed out (300 s; 20 s on re-run) -> template answer.
+- Tricky phrasings live (`run_guardrail_phrasings.py`, 13 PROVISIONAL): 12 of 13 handled as intended.
+  The router alone answered "Is TCS undervalued?", "TCS vs Infosys margins", "Does the DCF show TCS is
+  undervalued?" and "Is the share price below the DCF value per share?"; the pre-check refused them.
+  Legit-but-advice-sounding ("What does the DCF imply?", "Did TCS buy back shares?") pass. Miss:
+  "compare with the industry average" (neither layer refuses).
+
+**Retrieval (time-boxed, no code changed)**
+- recall@5 on the 12 PROVISIONAL probes: before 9 of 12. Tried: strip the company name from the query
+  -> 11 of 12; keyword-overlap re-rank -> 11-12 of 12 depending on two settings. Neither adopted (see
+  NOTES.md: the agent's real queries come from the router and rarely contain "TCS", stripping hurt one
+  live wording, and the re-rank settings would be tuned on the probes themselves). Learned: the
+  client-concentration sentence (PDF 226) is buried in a table-heavy chunk (a chunking fix); for
+  dividends the right page was retrieved at rank 3 but the composer still said "not available".
+
+**Fallback router**: not built. Routing is 20 of 20 on the provisional dev questions (threshold ~90%).
+
+**Decisions**
+- The verifier is strict: any error -> template. Judgement words, passage-only numbers, missing
+  `[id]` brackets and numbers_used corrections are warnings only.
+- Added a deterministic refusal pre-check (not in the brief) because the live router alone answered
+  4 of the tricky phrasings. Pre-check refusals carry a RoutePlan marked "refused by the pattern
+  pre-check" so scoring still works.
+- Added the "period after the latest data" refusal after the live run showed "revenue in FY28" being
+  answered.
+- Unknown ids in the composer's id lists are now errors (M5 dropped them with a warning).
+- M5 tests changed where M6 changed behaviour: the scripted composer in `test_m5_acceptance.py` now
+  writes the figures it lists (numbers_used comes from the text); the sensitivity tool test expects
+  the grid's axis values as numbers.
+- `dcf_footer` lives in config, so its wording can change after a finance-partner review.
+
+**Known issues / flags for the author**
+- All verifier rules, guardrail patterns and aliases were written against Claude's own phrasings and
+  20 PROVISIONAL questions: TO VERIFY on the author's dev split (P0.4). See NOTES.md for the list.
+- The live model never writes `[id]` citations, so the per-sentence citation check rarely bites live
+  (citations are attached by code anyway).
+- Answers with passage numbers (e.g. "ISO 27001") pass with a warning; decide if they should block.
+- "Compare with the industry average" is not refused.
+- PDEV-15/16 still answer "not available" (retrieval/composer, see above).
+
+**Next**
+- M7: eval harness + naive-RAG baseline + ablation (verifier on vs off). Not started. Needs
+  `eval/questions.jsonl` (P0.4) for real numbers.
+
+**How to run**
+```
+PYTHONPATH=src:tests .venv/bin/pytest -q
+PYTHONPATH=src:tests .venv/bin/python tests/run_provisional_dev.py
+PYTHONPATH=src:tests .venv/bin/python tests/run_guardrail_phrasings.py
+PYTHONPATH=src:tests .venv/bin/python tests/run_provisional_probes.py
+```
+
+---
+
 ## 2026-10-04 — M5: tool layer, two-step router (v1), structured Answer; P0.6 model test
 
 **Done**
