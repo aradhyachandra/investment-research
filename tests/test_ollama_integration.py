@@ -1,13 +1,21 @@
-"""Integration test against the real local embedding model. Skipped automatically if Ollama is
-not running or nomic-embed-text is not pulled. Only talks to localhost."""
+"""Integration test against the real local embedding model. Only talks to localhost.
+
+OPT-IN: runs only when ERP_LIVE_TESTS=1 is set AND Ollama is running with nomic-embed-text pulled.
+A plain `pytest` never calls the live model (keeps the 8 GB Mac free and test runs fast):
+    ERP_LIVE_TESTS=1 PYTHONPATH=src:tests .venv/bin/python -m pytest tests/test_ollama_integration.py
+"""
 import math
+import os
 
 import pytest
 
 from erp.ingest.embed import embed_texts, ollama_status
 
-status = ollama_status()
-pytestmark = pytest.mark.skipif(not status.ok, reason=f"Ollama not usable: {status.reason}")
+if os.environ.get("ERP_LIVE_TESTS") != "1":
+    pytestmark = pytest.mark.skip(reason="live-model test; set ERP_LIVE_TESTS=1 to run")
+else:
+    status = ollama_status()
+    pytestmark = pytest.mark.skipif(not status.ok, reason=f"Ollama not usable: {status.reason}")
 
 
 def cosine(a, b):

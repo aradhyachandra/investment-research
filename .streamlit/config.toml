@@ -7,3 +7,28 @@ toolbarMode = "minimal"    # hide developer/deploy menu items
 
 [server]
 headless = true            # do not try to open a browser window
+
+# M8.1: theme. One blue accent on a warm off-white page; serif headings for a research-report feel.
+# Chart colours are a colour-blind-checked set (blue, orange, aqua ...); charts.py uses the same values.
+# Fonts are Streamlit's bundled ones (no web font is fetched).
+[theme]
+base = "light"
+primaryColor = "#1c5cab"
+backgroundColor = "#fcfcfb"
+secondaryBackgroundColor = "#f0efec"
+textColor = "#1a1d24"
+linkColor = "#1c5cab"
+borderColor = "#d9d8d3"
+font = "sans-serif"
+headingFont = "serif"
+baseRadius = "0.6rem"
+metricValueFontSize = "1.9rem"
+blueColor = "#2a78d6"
+greenColor = "#1a8a5a"
+orangeColor = "#d9661f"
+violetColor = "#6a4fc4"
+chartCategoricalColors = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
+chartSequentialColors = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987e5", "#256abf", "#184f95", "#0d366b"]
+
+[theme.sidebar]
+backgroundColor = "#f4f3f0"

@@ -1,5 +1,72 @@
 # PROGRESS
 
+## 2026-10-07 — M8.1: UI polish (Streamlit)
+
+**Done**
+- Layout (`src/erp/ui/app.py`, rewritten): header (title, "TCS · FY26 · Ind AS consolidated", the
+  tagline) and the permanent disclaimer above five tabs: Ask, Company snapshot, DCF, How it works,
+  Evaluation. Disclaimer still at the bottom too. Plain Streamlit + Altair; no custom JavaScript, no
+  raw HTML; the page loads nothing from outside localhost (checked in the browser).
+- Theme (`.streamlit/config.toml`): blue accent, warm off-white page, serif headings, bundled fonts.
+- Ask: 5 one-click examples (fact EV-A01, ratio EV-C01, DCF EV-D04, qualitative EV-E01, refusal
+  EV-G01; dev split only, from `config/ui.yaml`); answer badge (checked by verifier / code-built
+  fallback / refused / no verifier / verifier errors ignored); coloured citation chips (Filing blue,
+  Author's note violet, other grey); STATUS line + fixed footer beside every DCF figure; step cards
+  for ratio and DCF calculation paths (full tables kept underneath).
+- Source page preview (`src/erp/ui/page_preview.py`): renders the cited PDF page from `data/raw/`
+  with PyMuPDF in memory and highlights the figure (Indian grouping first) or the passage's
+  sentences; falls back to "shown without highlight" or a fresh-clone note. Nothing written to disk.
+- Company snapshot (`snapshot.py`): revenue, net margin, basic EPS, cash for FY26 with FY25, growth
+  ratio where configured, source chip, "verified by <name> (<date>)" from the database's
+  `verified_by`. Tools run on an in-memory copy of the DB (compute_ratio / run_dcf log rows).
+- DCF tab (`dcf_view.py`, `charts.py`): bear/base/bull bar chart, sensitivity heatmap (scenario cell
+  outlined), EV-to-equity waterfall, base assumptions table with rationale and source, STATUS line on
+  top, fixed footer under each chart.
+- How it works: graphviz flow diagram + 5 sentences.
+- Evaluation (`eval_view.py`): latest finished test and dev runs, chart + "k of n" table for numeric
+  accuracy, gold-matching citations, behaviour correct, unsupported claims (full vs naive RAG);
+  caveats read from README section 7; "no results" message for a fresh clone.
+- Tests: `tests/test_ui_polish.py` (43, written before the code for each view model; page tests with
+  AppTest). `tests/test_ui.py` page helper now passes a missing DB path (Ask tab only).
+  Full suite without `tests/test_ollama_integration.py`: 663 passed (620 before + 43 new), 35 s.
+- No new dependencies (Altair and PyMuPDF were already pinned). `pip check`: no broken requirements.
+
+**Decisions**
+- No edits to agent, router, verifier, DCF engine, retrieval, eval, data, `eval/questions.jsonl`,
+  `data/manual/`, `data/sample/` or `dcf_inputs.yaml`.
+- The page never writes to `data/db/sample.sqlite`: it backs the file up into memory first.
+- Display geometry is the only arithmetic in the UI: eval bars are k ÷ n; waterfall bar ends are
+  running totals of the engine's bridge items (tested to end at the engine's equity value).
+- PDF found by document title -> `file_name` in `config/companies/tcs.yaml`, so preview works in
+  `--demo` without the DB.
+- Highlight fallback: the AR text layer splits some figures ("49, 454"); neighbouring whole words are
+  joined when a plain search fails. On all saved eval answers, every cited figure is highlighted; 16
+  passage citations are not (cover pages, garbled glyphs) and show without highlight.
+- "DCF value" example = EV-D04 (terminal-value share), as in docs/DEMO.md.
+- Snapshot cards in a 2 x 2 grid (four across truncated values with the sidebar open).
+
+**Known issues / flags for the author**
+- `tests/test_ollama_integration.py` is only skipped when Ollama is not running. Ollama was running
+  on this machine, so my first full-suite run started live model calls; I stopped it (no model was
+  loaded afterwards) and re-ran without that file. Consider an opt-in flag for that file.
+- Screenshots are in the session scratchpad, not the repo (one shows a rendered annual-report page).
+- With all 43 new tests on the shared Chroma `env` fixture, a later Chroma client start-up hung in
+  the full suite (stack dump: chromadb Rust `start`, from `test_verifier.py`'s fixture); smaller
+  combinations did not hang. The new tests now use a Chroma-free `env`; only the passage answer opens
+  an index. Root cause TO VERIFY (unclosed Chroma clients per process?), see NOTES.md.
+- Streamlit does not reload `src/erp/ui/*` on save; restart the server after editing them.
+
+**What to review**: see the end of `docs/M8_1_ui_polish.md` and the session summary.
+
+**Next**
+- Author review of the page (wording, example choice, DCF tab), then commit (nothing committed).
+
+**How to run**
+```
+.venv/bin/streamlit run app/streamlit_app.py -- --demo
+PYTHONPATH=src:tests .venv/bin/pytest -q tests/test_ui.py tests/test_ui_polish.py
+```
+
 ## 2026-10-04 — M9: README, results table, demo script, cleanup
 
 **Done**

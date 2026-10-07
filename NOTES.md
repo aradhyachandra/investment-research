@@ -431,3 +431,22 @@ TODO (need data we don't have yet):
 - [x] Restatements via `restated` + `supersedes_source_doc` -> `supersedes_fact_id` (M2.1)
 - [~] `verified_by` workflow: CSV columns `verified_by`/`verified_on` exist (M2); both required
       together; verifier must differ from `entered_by`. Double entry itself is a manual process.
+
+## TO VERIFY / decide (from M8.1 UI polish, 2026-10-07)
+
+- Page-preview search assumes filings print figures in Indian grouping ("2,67,021"), then tries
+  international grouping and plain digits. True for the FY26 annual report pages checked; TO VERIFY
+  for fact sheets and other documents.
+- The highlight joins neighbouring words when the PDF text layer splits a figure ("49, 454"). It
+  matches whole words only, but on a dense table a short figure could still match the wrong cell.
+  TO VERIFY by eye on the pages you screenshot.
+- Rendering pages from the private PDFs in a public demo shows annual-report pages on screen (not
+  stored). TO VERIFY that this is fine for the screenshots you publish (licence of the PDFs).
+- `tests/test_ollama_integration.py` runs whenever Ollama is up. Decide whether it should need an
+  explicit opt-in (e.g. an environment variable) so a plain `pytest` never calls a live model.
+- ChromaDB hang in the full suite: each test that builds a `PersistentClient` keeps it open for the
+  whole pytest process. With 43 more such tests, a later `PersistentClient` start (chromadb Rust
+  layer, `api/rust.py` `start`) hung. Worked around by not opening an index in tests that need none.
+  TO VERIFY the real limit, and consider closing clients in a fixture teardown.
+
+- 2026-10-07 (resolved): tests/test_ollama_integration.py is now opt-in (ERP_LIVE_TESTS=1). A plain pytest never calls the live model.

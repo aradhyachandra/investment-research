@@ -21,3 +21,44 @@ demo:
 
 # Live mode: the SQLite database the agent reads.
 db_path: data/db/sample.sqlite
+
+# ---------- M8.1 polish ----------
+
+# Page header. Company-specific words live here, not in code.
+header:
+  title: "TCS research assistant"
+  scope: "TCS · FY26 · Ind AS consolidated"
+  tagline: "AI interprets, code calculates, sources prove"
+
+# One-click example questions on the Ask tab. Text is read from eval/questions.jsonl by id
+# (dev split only: frozen test questions are never shown as examples). In --demo mode the saved
+# answer to the same question id is shown.
+examples:
+  - {kind: "Fact", question_id: EV-A01}
+  - {kind: "Ratio", question_id: EV-C01}
+  - {kind: "DCF value", question_id: EV-D04}
+  - {kind: "Qualitative", question_id: EV-E01}
+  - {kind: "Refusal", question_id: EV-G01}
+
+# Company snapshot tab: headline figure cards. Values come from the tools (get_financial_fact /
+# compute_ratio); this only says which figures to ask for. change_ratio: an optional growth ratio
+# (config/ratios.yaml) shown under the card.
+snapshot:
+  period: FY26
+  compare_period: FY25
+  basis: consolidated
+  cards:
+    - {label: "Revenue from operations", tool: get_financial_fact, metric_id: revenue_from_operations,
+       change_ratio: revenue_growth_yoy}
+    - {label: "Net margin", tool: compute_ratio, ratio_id: net_margin}
+    - {label: "EPS (basic)", tool: get_financial_fact, metric_id: eps_basic, change_ratio: eps_growth_yoy}
+    - {label: "Cash and cash equivalents", tool: get_financial_fact, metric_id: cash_and_equivalents}
+
+# DCF tab: which scenarios of the assumptions file to show, in this order, and which one gets the
+# sensitivity heatmap, the bridge waterfall and the assumptions table.
+dcf:
+  scenarios: [bear, base, bull]
+  base: base
+
+# Source page preview: where the PDFs are on this machine (the private data checkout).
+raw_dir: data/raw

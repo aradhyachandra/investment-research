@@ -13,6 +13,7 @@ Where the Answer lacks something, this module says so instead of filling it in:
   - Chunk text is the full search hit (tool_results[].detail.results[].text) when present,
     otherwise the passage as cut for the composer.
 """
+import json
 from pathlib import Path
 
 import yaml
@@ -59,6 +60,7 @@ class CitationView(BaseModel):
     badge_note: str | None = None     # e.g. "AI-generated sample note ..."
     source_title: str
     page_text: str | None = None      # "PDF p.167 (printed p.197)"
+    page: int | None = None           # PDF page index, 1-based (first page of a passage)
     period: str | None = None
     basis: str | None = None
     accounting_standard: str | None = None
@@ -68,6 +70,7 @@ class CitationView(BaseModel):
     chunk_text: str | None = None     # chunks only
     formula: str | None = None        # calc only
     input_evidence_ids: list[str] = []
+    reported_value: float | None = None   # facts only: the figure as printed (to find it on the PDF page)
 
 
 class NumberClaim(BaseModel):
@@ -126,6 +129,7 @@ class DCFPath(BaseModel):
 class VerificationView(BaseModel):
     status: str                       # one sentence
     fallback_used: bool
+    report_ok: bool | None = None     # the verifier's verdict on the model's text; None = no report
     issues: list[tuple[str, str, str, str]] = []   # (severity, check, span, message)
     warnings: list[str] = []
 
@@ -207,7 +211,25 @@ def _chunk_texts(results: list[ToolResult]) -> dict[str, tuple[str, str]]:
     return out
 
 
-def citation_view(e: Evidence, types: dict[int, str], chunks: dict, ui_cfg: dict) -> CitationView:
+def reported_values(results: list[ToolResult]) -> dict[str, float]:
+    """fact evidence id -> value as printed in the filing, from the tool output stored in the Answer."""
+    found = {}
+
+    def add(f: dict):
+        if f.get("fact_id") is not None and f.get("reported_value") is not None:
+            found[f"fact:{f['fact_id']}"] = f["reported_value"]
+    for r in results:
+        d = r.detail or {}
+        if r.tool == "get_financial_fact":
+            add(d)
+        elif r.tool == "compute_ratio":
+            for i in d.get("inputs", []):
+                add(i.get("fact", {}))
+    return found
+
+
+def citation_view(e: Evidence, types: dict[int, str], chunks: dict, ui_cfg: dict,
+                  reported: dict[str, float] | None = None) -> CitationView:
     if e.kind in KIND_BADGES:
         badge, badge_note = KIND_BADGES[e.kind], None
     else:
@@ -215,9 +237,9 @@ def citation_view(e: Evidence, types: dict[int, str], chunks: dict, ui_cfg: dict
     section, text = chunks.get(e.evidence_id, (None, None))
     return CitationView(
         evidence_id=e.evidence_id, kind=e.kind, badge=badge, badge_note=badge_note, source_title=e.source_title,
-        page_text=page_text(e), period=e.period, basis=e.basis, accounting_standard=e.accounting_standard,
+        page_text=page_text(e), page=e.page, period=e.period, basis=e.basis, accounting_standard=e.accounting_standard,
         verified=e.verified, note=e.note, section=section, chunk_text=text, formula=e.formula,
-        input_evidence_ids=e.input_evidence_ids)
+        input_evidence_ids=e.input_evidence_ids, reported_value=(reported or {}).get(e.evidence_id))
 
 
 # ---------- calculation paths ----------
@@ -340,7 +362,8 @@ def verification_view(a: Answer) -> VerificationView:
         status = "The verifier passed the model's text, with warnings."
     else:
         status = "The verifier passed the model's text with no issues."
-    return VerificationView(status=status, fallback_used=fallback, issues=issues, warnings=a.warnings)
+    return VerificationView(status=status, fallback_used=fallback, report_ok=rep.ok if rep else None,
+                            issues=issues, warnings=a.warnings)
 
 
 # ---------- the whole answer ----------
@@ -348,9 +371,10 @@ def verification_view(a: Answer) -> VerificationView:
 def build_view(a: Answer, *, display: dict, ui_cfg: dict, assumptions_file, dcf_footer: str) -> AnswerView:
     types = doc_types(a.tool_results)
     chunks = _chunk_texts(a.tool_results)
+    reported = reported_values(a.tool_results)
     all_evidence = {e.evidence_id: e for r in a.tool_results for e in r.evidence}
     all_evidence.update({e.evidence_id: e for e in a.citations})
-    by_id = {eid: citation_view(e, types, chunks, ui_cfg) for eid, e in all_evidence.items()}
+    by_id = {eid: citation_view(e, types, chunks, ui_cfg, reported) for eid, e in all_evidence.items()}
 
     number_claims = []
     for n in a.numbers_used:
@@ -374,3 +398,97 @@ def build_view(a: Answer, *, display: dict, ui_cfg: dict, assumptions_file, dcf_
         ratio_paths=[ratio_path(r, by_id, display) for r in ok if r.tool == "compute_ratio"],
         dcf_paths=[dcf_path(r, display, assumptions_file, dcf_footer) for r in ok if r.tool == "run_dcf"],
         limitations=a.limitations, verification=verification_view(a))
+
+
+# ---------- M8.1: chips, answer badge, step cards, page-preview targets, example questions ----------
+
+CHIP_COLOURS = {FILING: "blue", AUTHORS_NOTE: "violet"}   # every other badge is grey
+
+
+def chip_colour(badge: str) -> str:
+    return CHIP_COLOURS.get(badge, "gray")
+
+
+def chip_text(c: CitationView) -> str:
+    """'Filing · <document> · PDF p.167 (printed p.197)': what a citation chip says."""
+    return " · ".join(x for x in (c.badge, c.source_title, c.page_text) if x)
+
+
+def answer_badge(view: AnswerView) -> tuple[str, str]:
+    """(text, colour) of the badge above an answer: who wrote it and whether the verifier passed it."""
+    v = view.verification
+    if view.refused or view.composed_by == "refusal":
+        return "Refused by code", "gray"
+    if v.fallback_used:
+        return "Code-built fallback answer", "orange"
+    if v.report_ok is None:
+        return "No verifier ran", "red"
+    if not v.report_ok:
+        return "Verifier found errors (verifier switched off)", "red"
+    if v.issues:
+        return "Checked by verifier (with warnings)", "green"
+    return "Checked by verifier", "green"
+
+
+class Step(BaseModel):
+    title: str
+    lines: list[str]
+
+
+def ratio_steps(p: RatioPath) -> list[Step]:
+    """A ratio's calculation path as three cards: inputs (with pages), formula, result."""
+    inputs = [f"{i.role}: {i.label} = {i.display} ({i.citation.source_title}, {i.citation.page_text or 'no page'})"
+              for i in p.inputs]
+    formula = [f"{p.formula} ({p.formula_version})"] + ([p.definition] if p.definition else [])
+    return [Step(title="Inputs", lines=inputs), Step(title="Formula", lines=formula),
+            Step(title="Result", lines=[p.result_display])]
+
+
+class PreviewTarget(BaseModel):
+    """A cited page that the source page preview can show, with the text to look for on it."""
+    evidence_id: str
+    kind: str                         # fact / doc_chunk
+    label: str                        # what the picker shows
+    source_title: str
+    page: int
+    needles: list[str]                # strings to highlight, best first
+
+
+def preview_targets(view: AnswerView) -> list[PreviewTarget]:
+    """Every cited fact (including ratio inputs) and passage that has a PDF page, each once."""
+    from erp.ui.page_preview import number_needles, passage_needles
+
+    out, seen = [], set()
+
+    def add(c: CitationView | None, label: str):
+        if c is None or c.evidence_id in seen or c.page is None or c.kind not in ("fact", "doc_chunk"):
+            return
+        needles = (number_needles(c.reported_value) if c.kind == "fact" and c.reported_value is not None
+                   else passage_needles(c.chunk_text or ""))
+        seen.add(c.evidence_id)
+        out.append(PreviewTarget(evidence_id=c.evidence_id, kind=c.kind, label=f"{label} · {chip_text(c)}",
+                                 source_title=c.source_title, page=c.page, needles=needles))
+    for n in view.number_claims:
+        add(n.citation, n.label)
+        for i in n.inputs:
+            add(i, f"input to {n.label}")
+    for c in view.passage_claims:
+        add(c, f"passage{', ' + c.section if c.section else ''}")
+    return out
+
+
+class ExampleQuestion(BaseModel):
+    kind: str                         # e.g. "A fact"
+    question_id: str
+    question: str
+
+
+def example_questions(ui_cfg: dict, questions_path) -> list[ExampleQuestion]:
+    """The one-click examples (config/ui.yaml `examples`), with their text read from the question file."""
+    texts = {}
+    for line in Path(questions_path).read_text().splitlines():
+        if line.strip():
+            row = json.loads(line)
+            texts[row["id"]] = row["question"]
+    return [ExampleQuestion(kind=e["kind"], question_id=e["question_id"], question=texts[e["question_id"]])
+            for e in ui_cfg.get("examples", []) if e["question_id"] in texts]

@@ -312,20 +312,22 @@ def test_demo_errors_are_clear(tmp_path):
 
 # ---------- the Streamlit page itself (headless AppTest, no browser, no model) ----------
 
-def _page_with_answer(answer_json_path: str):
-    """Script run by AppTest: live mode with a fake answer function that returns a saved Answer."""
+def _page_with_answer(answer_json_path: str, db_path: str):
+    """Script run by AppTest: live mode with a fake answer function that returns a saved Answer.
+    db_path: a missing file, so the snapshot and DCF tabs (M8.1) do not depend on the local database."""
     from pathlib import Path as _P
 
     from erp.agent.answer_schema import Answer as _A
     from erp.ui.app import main as _main
     saved = _A.model_validate_json(_P(answer_json_path).read_text())
-    _main([], answer_fn=lambda q: saved.model_copy(update={"question": q}))
+    _main(["--db", db_path], answer_fn=lambda q: saved.model_copy(update={"question": q}))
 
 
 def run_page(tmp_path, answer: Answer, question="test question") -> AppTest:
     path = tmp_path / "answer.json"
     path.write_text(answer.model_dump_json())
-    at = AppTest.from_function(_page_with_answer, args=(str(path),), default_timeout=30)
+    at = AppTest.from_function(_page_with_answer, args=(str(path), str(tmp_path / "no_db.sqlite")),
+                               default_timeout=30)
     at.run()
     assert not at.exception
     at.text_input[0].input(question)
@@ -418,7 +420,7 @@ def test_demo_mode_page(tmp_path, fact_answer, dcf_answer):
 
     def script(results):
         from erp.ui.app import main as _main
-        _main(["--demo", results])
+        _main(["--demo", results, "--db", results + "/no_db.sqlite"])
     at = AppTest.from_function(script, args=(str(tmp_path),), default_timeout=30)
     at.run()
     assert not at.exception, at.exception
