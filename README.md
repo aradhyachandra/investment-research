@@ -154,8 +154,8 @@ verifier).
 
 **Results.** The block below is generated from `eval/results/` by `scripts/make_results_table.py`;
 nothing in it is typed by hand. Read it with these caveats:
-- These are **development-stage numbers on the dev split**: 20 questions, one company, facts not yet
-  verified by a human, gold answers not yet signed off by the author. The plan says no accuracy
+- These are **development-stage numbers on the dev split**: 20 questions, one company, gold answers and
+  facts signed off by the author only (no finance-partner review). The plan says no accuracy
   numbers should be quoted as results until the full dataset, the hand DCF and the frozen test split
   exist; treat this table as a plumbing check, not a headline.
 - The dev runs so far were made from uncommitted code (git SHA ending in `-dirty`). A fresh dev run
@@ -215,16 +215,16 @@ This project was built with an AI coding assistant, milestone by milestone, from
 (`PROJECT_PLAN.md`; progress log in `PROGRESS.md`; open questions in `NOTES.md`). Plainly:
 
 - **Eval questions and gold answers** were drafted with AI assistance and the figures were
-  cross-checked against the annual report pages by the AI assistant. Every one of the 41 questions
-  has `entered_by` = "Claude draft; figures cross-checked against the FY26 annual report pages by
-  Claude on 2026-10-04; pending Aradhya sign-off". **The author has not signed off any gold answer
-  yet**, and no finance reviewer has spot-checked them.
+  cross-checked against the annual report pages by the AI assistant. The author reviewed and signed
+  off all 41 on 2026-10-07 (recorded in each question's `entered_by` field). **No finance reviewer
+  has spot-checked them**, which the plan asks for on at least 10 gold answers.
 - **DCF assumptions** in `data/manual/dcf_inputs.yaml` were drafted by an AI assistant and adopted
   by the author as the working file on 2026-10-04. They **have not been reviewed by a finance
   partner**. DCF eval gold is the engine's own output on those assumptions, so it is a regression
   check, not independent truth.
 - **Facts** (12 in `data/sample/facts_sample.csv`) were read from the annual report by an AI
-  assistant and are all marked not verified by a human.
+  assistant; the author verified all 12 against the report pages on 2026-10-07 (`verified_by` and
+  `verified_on` in the CSV). No finance reviewer has checked them.
 - **Runtime model:** `qwen2.5:3b` running locally through Ollama (chosen in a small test on an 8 GB
   MacBook Air; NOTES.md, P0.6). TO VERIFY: its licence. As far as known, the 3B size is under the
   "Qwen Research License" rather than Apache 2.0; fine for local personal use, to be checked before

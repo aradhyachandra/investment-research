@@ -8,7 +8,10 @@ from erp.config import load_context
 from erp.db.load_facts import create_db, load_rows, seed_reference_data
 
 REPO = Path(__file__).resolve().parent.parent
-SAMPLE_CSV = REPO / "data" / "sample" / "facts_sample.csv"
+# Tests use a frozen UNVERIFIED copy of the sample facts, so "unverified" behaviour stays testable
+# after the author signs off the real file (data/sample/facts_sample.csv).
+SAMPLE_CSV = REPO / "tests" / "fixtures" / "facts_unverified_fixture.csv"
+REAL_SAMPLE_CSV = REPO / "data" / "sample" / "facts_sample.csv"
 COMPANY_CONFIG = REPO / "config" / "companies" / "tcs.yaml"
 METRICS_CONFIG = REPO / "config" / "metrics.yaml"
 HASHES_FILE = REPO / "sources_hashes.txt"
