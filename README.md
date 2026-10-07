@@ -154,14 +154,16 @@ verifier).
 
 **Results.** The block below is generated from `eval/results/` by `scripts/make_results_table.py`;
 nothing in it is typed by hand. Read it with these caveats:
-- These are **development-stage numbers on the dev split**: 20 questions, one company, gold answers and
-  facts signed off by the author only (no finance-partner review). The plan says no accuracy
-  numbers should be quoted as results until the full dataset, the hand DCF and the frozen test split
-  exist; treat this table as a plumbing check, not a headline.
-- The dev runs so far were made from uncommitted code (git SHA ending in `-dirty`). A fresh dev run
-  on committed code should replace them before any number is quoted.
-- The "questions file has changed" warning is because a later commit edited only the `entered_by`
-  text of every question (no question, gold value or source changed).
+- **Small sample, one company.** 20 dev and 21 test questions on TCS FY25/FY26 only, with 12 facts
+  in the database. Gold answers and facts are signed off by the author only (no finance-partner
+  review), and the DCF gold is the engine's own output. Read these as counts on a small, hand-built
+  set, not as general accuracy figures.
+- **The test split was run once**, on committed code (`eeaa196`), after all fixes were made on dev;
+  nothing was tuned on it afterwards. The plan's full dataset and hand-built DCF do not exist yet.
+- **Headline metrics** are numeric accuracy and gold-matching citations. The row "all numeric claims
+  citing a gold page" swings with answer length and is not a headline (see Known weaknesses).
+- **Scoring is strict about periods** (see Known weaknesses: EV-A04 on test is a correct figure
+  scored wrong). Numbers are shown exactly as the harness produced them.
 - `eval/results/` is gitignored (it holds annual-report excerpts). In a fresh clone, re-running the
   script prints "not yet run" until you run the eval yourself; the block below is what the author's
   machine produced.
@@ -201,7 +203,26 @@ All finished dev runs (the table shows the last one):
 
 ### Test split
 
-Test split not yet run.
+Latest finished run:
+
+- Run `20261007-132850_eeaa1965`, model `qwen2.5:3b`, temperature 0, seed 0, 21 questions.
+- Code: git `eeaa196` (committed code).
+- Facts unverified by a human: 0 of 12. Gold answers pending author sign-off: 0 of 21.
+
+| Metric | Full system | Verifier off | Naive RAG |
+|---|---|---|---|
+| Numeric accuracy (questions with a gold value) | 10 of 14 | 10 of 14 | 0 of 14 |
+| Gold-matching numeric claims citing a gold page | 8 of 8 | 8 of 8 | 0 of 0 |
+| All numeric claims citing a gold page | 13 of 44 | 13 of 16 | 2 of 14 |
+| Behaviour correct (answer / refuse / not available) | 21 of 21 | 21 of 21 | 18 of 21 |
+| Guardrail questions refused correctly (G) | 3 of 3 | 3 of 3 | 1 of 3 |
+| Over-refusal (refused an answerable question) | 0 of 18 | 0 of 18 | 1 of 18 |
+| Routing: right tools | 17 of 18 | 17 of 18 | n/a |
+| Routing: right tools and period | 17 of 18 | 17 of 18 | n/a |
+| Unsupported numeric claims | 1 of 52 | 0 of 24 | 8 of 17 |
+| Verifier rejections (template answer shipped) | 1 of 18 | 0 of 18 | n/a |
+| Answers with advice words | 0 of 21 | 0 of 21 | 0 of 21 |
+| Errors | 0 of 21 | 0 of 21 | 0 of 21 |
 <!-- results:end -->
 
 **Limitations of the evaluation:** small n (20 dev, 21 test), one company, one small model; the
@@ -245,6 +266,17 @@ This project was built with an AI coding assistant, milestone by milestone, from
     sometimes renders ₹ as "H", e.g. "H1,761 crore"), so such figures are neither grounded nor
     flagged.
   - The router prompt is fragile with a 3B model; small wording changes move routing results.
+  - When the verifier rejects the model's text, the code-built fallback answer can quote passages
+    that are irrelevant or garbled (seen on EV-F01 dev and EV-F02 test: a CSR "average net profit"
+    paragraph). Every number in it is sourced, but it does not answer the question.
+  - The verifier can misread a comparison that spans two sentences (the rejection was right, the
+    stated reason was wrong), and plain constants such as "100" pass unchecked.
+  - The scorer is strict about periods: a claim must name the period as a label (e.g. "FY25"). On the
+    test split, EV-A04 states the correct figure (INR 48,797 crore) but writes "fiscal year ending
+    March 2025", so it is scored wrong. The test numbers are reported as the harness produced them,
+    not re-scored.
+  - The row "all numeric claims citing a gold page" depends on how verbose an answer is (a fallback
+    answer that quotes passages adds dozens of claims). It is not a headline metric.
   - PDF extraction issues: letter-spaced text on designed pages, broken glyph maps on some pages,
     coarse section detection.
 - **Licences of dependencies:** PyMuPDF is AGPL-3.0 (or commercial). TO VERIFY that this is
