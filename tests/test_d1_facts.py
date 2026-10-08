@@ -1,6 +1,6 @@
 """D1: expanded TCS facts from the FY26 annual report (data/manual/financials_tcs.csv).
 
-Covers: the new CSV (signed-off rows kept, new rows unverified and paged), the new metrics and
+Covers: the new CSV (all rows signed off by the author, with pages), the new metrics and
 their plausibility bands, the load-time cross-foot checks, the SHARES unit, the new ratios
 (sum and average operands), and that the router catalog picks the new metrics and ratios up
 from config with no prompt change.
@@ -99,13 +99,13 @@ def test_signed_off_sample_rows_are_kept_with_their_sign_off():
         assert manual[(r["metric_id"], r["period"])] == r
 
 
-def test_new_rows_are_unverified_claude_entries_with_both_page_numbers():
+def test_new_rows_are_claude_entries_signed_off_by_the_author_with_both_page_numbers():
     signed = {(r["metric_id"], r["period"]) for r in _rows(REAL_SAMPLE_CSV)}
     new = [r for r in manual_rows() if (r["metric_id"], r["period"]) not in signed]
     assert len(new) == 2 * len(NEW_METRICS)
     for r in new:
         assert r["entered_by"] == "Claude"
-        assert r["verified_by"] == "" and r["verified_on"] == ""
+        assert r["verified_by"] == "Aradhya Chandra" and r["verified_on"] == "2026-10-08"   # D1 sign-off
         assert r["source_doc"] == AR and r["basis"] == "consolidated" and r["ticker"] == "TCS"
         # AR FY26: PDF 34-358 print page number = PDF index + 30 (config page_labels).
         assert int(r["source_page_label"]) == int(r["source_page"]) + 30, r
@@ -152,7 +152,7 @@ def test_manual_csv_loads_cleanly_with_all_checks(conn, ctx):
     ids = load_rows(conn, manual_rows(), ctx, entry_method="llm_extracted")
     assert len(ids) == 12 + 2 * len(NEW_METRICS)
     unverified = conn.execute("SELECT COUNT(*) FROM fact WHERE verified_by IS NULL").fetchone()[0]
-    assert unverified == 2 * len(NEW_METRICS)
+    assert unverified == 0                          # all signed off (2026-10-07 and 2026-10-08)
 
 
 def test_manual_csv_loads_with_the_real_pdf_hashes_if_present(tmp_path):
@@ -177,7 +177,7 @@ def test_manual_csv_loads_with_the_real_pdf_hashes_if_present(tmp_path):
 def test_spot_values_load_with_their_pages(manual, metric_id, period, value, page):
     f = get_financial_fact(manual, "TCS", metric_id, period)
     assert f.value == value and f.unit == "INR_CRORE" and f.source_page == page
-    assert f.source_page_label == str(page + 30) and not f.verified
+    assert f.source_page_label == str(page + 30) and f.verified
 
 
 def test_shares_outstanding_converted_to_crore(manual):
@@ -287,8 +287,8 @@ def test_new_ratio_matches_hand_calculation(manual, ratio_id, period, expected):
     r = compute_ratio(manual, "TCS", ratio_id, period)
     assert r.value == pytest.approx(expected, rel=REL)
     assert r.unit == "PERCENT"
-    # Verified only if every input is. All new ratios (ROE v2 included) use new, not-yet-verified rows.
-    assert r.verified is False
+    # Verified only if every input is; every input is now signed off.
+    assert r.verified is True
 
 
 def test_new_ratios_are_in_config():

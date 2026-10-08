@@ -248,10 +248,10 @@ This project was built with an AI coding assistant, milestone by milestone, from
   by the author as the working file on 2026-10-04. They **have not been reviewed by a finance
   partner**. DCF eval gold is the engine's own output on those assumptions, so it is a regression
   check, not independent truth.
-- **Facts** (52 in `data/manual/financials_tcs.csv`) were read from the annual report by an AI
-  assistant; the author verified the original 12 against the report pages on 2026-10-07
-  (`verified_by` and `verified_on` in the CSV). The 40 added in D1 (2026-10-08) are not yet
-  verified. No finance reviewer has checked them.
+- **Facts** (54 in `data/manual/financials_tcs.csv`) were read from the annual report by an AI
+  assistant; the author verified all of them against the report pages (the original 12 on
+  2026-10-07, the 42 added in D1 on 2026-10-08; `verified_by` and `verified_on` in the CSV). No
+  finance reviewer has checked them.
 - **Runtime model:** `qwen2.5:3b` running locally through Ollama (chosen in a small test on an 8 GB
   MacBook Air; NOTES.md, P0.6). TO VERIFY: its licence. As far as known, the 3B size is under the
   "Qwen Research License" rather than Apache 2.0; fine for local personal use, to be checked before

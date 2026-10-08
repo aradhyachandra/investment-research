@@ -88,3 +88,5 @@ and the H glyph for the rupee sign, and each affected figure was settled by a to
 | equity_attributable_to_owners | 1,07,240 | 94,756 | "Equity attributable to shareholders of the Company", just above Non-controlling interests |
 
 Check: 1,07,240 + 1,238 (non-controlling interests) = 1,08,478 total equity, and 94,756 + 1,015 = 95,771; the loader checks this identity. Return on equity now divides by the average of this line (formula_version return_on_equity.v2), so both the profit and the equity exclude non-controlling interests.
+
+**Status:** all 42 facts reviewed and signed off by Aradhya Chandra on 2026-10-08 (`verified_by` / `verified_on` filled in the CSV).
