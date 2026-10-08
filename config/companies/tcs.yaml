@@ -89,6 +89,7 @@ plausibility_bands:
   profit_attributable_to_owners: {min: 15000, max: 150000}
   eps_basic:               {min: 40,     max: 400}
   total_equity:            {min: 40000,  max: 400000}
+  equity_attributable_to_owners: {min: 40000, max: 400000}
   cash_and_equivalents:    {min: 1000,   max: 60000}
   # D1 additions. Small or lumpy lines get wider bands; exceptional items and the cash outflows
   # may be 0 in a year (min 0). A negative outflow is rejected separately (metric `sign`).
@@ -138,6 +139,11 @@ cross_foot_checks:
       - {metric: exceptional_restructuring_expenses, sign: -1}
       - {metric: exceptional_labour_codes_impact, sign: -1}
       - {metric: exceptional_legal_claim_provision, sign: -1}
+  - name: total_equity
+    total: total_equity
+    parts:
+      - {metric: equity_attributable_to_owners, sign: 1}
+      - {metric: non_controlling_interests, sign: 1}
   - name: profit_for_the_year
     total: profit_after_tax
     parts:

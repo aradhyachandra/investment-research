@@ -52,7 +52,7 @@ NEW_METRICS = {
     "exceptional_labour_codes_impact", "exceptional_legal_claim_provision", "profit_before_tax",
     "tax_expense", "total_assets", "current_investments", "non_current_investments",
     "other_balances_with_banks", "lease_liabilities_current", "lease_liabilities_non_current",
-    "non_controlling_interests", "shares_outstanding", "cash_from_operations", "purchase_of_ppe",
+    "non_controlling_interests", "equity_attributable_to_owners", "shares_outstanding", "cash_from_operations", "purchase_of_ppe",
     "purchase_of_intangibles",
 }
 NEW_RATIOS = {"operating_margin", "effective_tax_rate", "return_on_equity", "capex_to_revenue",
@@ -262,7 +262,7 @@ def test_bad_cross_foot_config_is_rejected(tmp_path):
 # effective_tax_rate = tax / PBT x 100
 #   FY26: 16033 / 65487 x 100 = 24.4827217615709;  FY25: 16534 / 65331 x 100 = 25.3080467159541
 # return_on_equity = owners' profit / average total equity x 100
-#   FY26: (108478 + 95771) / 2 = 102124.5;  49210 / 102124.5 x 100 = 48.1862824297793
+#   FY26: (107240 + 94756) / 2 = 100998;  49210 / 100998 x 100 = 48.72373710370502 (v2: shareholders' equity)
 # capex_to_revenue = (PP&E + intangibles purchased) / revenue x 100
 #   FY26: 3670 + 367 = 4037;  4037 / 267021 x 100 = 1.5118661079091
 #   FY25: 2917 + 944 = 3861;  3861 / 255324 x 100 = 1.5121962682709
@@ -275,7 +275,7 @@ def test_bad_cross_foot_config_is_rejected(tmp_path):
     ("operating_margin", "FY25", 24.3474957309144),
     ("effective_tax_rate", "FY26", 24.4827217615709),
     ("effective_tax_rate", "FY25", 25.3080467159541),
-    ("return_on_equity", "FY26", 48.1862824297793),
+    ("return_on_equity", "FY26", 48.72373710370502),
     ("capex_to_revenue", "FY26", 1.5118661079091),
     ("capex_to_revenue", "FY25", 1.5121962682709),
     ("ocf_to_profit", "FY26", 105.8605974395448),
@@ -287,15 +287,16 @@ def test_new_ratio_matches_hand_calculation(manual, ratio_id, period, expected):
     r = compute_ratio(manual, "TCS", ratio_id, period)
     assert r.value == pytest.approx(expected, rel=REL)
     assert r.unit == "PERCENT"
-    # Verified only if every input is: ROE uses only signed-off sample facts; the rest use new rows.
-    assert r.verified == (ratio_id == "return_on_equity")
+    # Verified only if every input is. All new ratios (ROE v2 included) use new, not-yet-verified rows.
+    assert r.verified is False
 
 
 def test_new_ratios_are_in_config():
     ratios = load_ratios(RATIOS_CONFIG, METRICS_CONFIG)
     assert NEW_RATIOS <= set(ratios)
     for rid in NEW_RATIOS:
-        assert ratios[rid]["formula_version"] == f"{rid}.v1"
+        expected = "return_on_equity.v2" if rid == "return_on_equity" else f"{rid}.v1"
+        assert ratios[rid]["formula_version"] == expected
 
 
 def test_operating_margin_inputs_formula_and_ebit(manual):
@@ -319,11 +320,11 @@ def test_return_on_equity_uses_the_average_of_two_year_ends(manual):
     r = compute_ratio(manual, "TCS", "return_on_equity", "FY26")
     assert [(i.role, i.fact.metric_id, i.fact.period_label) for i in r.inputs] == [
         ("numerator", "profit_attributable_to_owners", "FY26"),
-        ("denominator (current year end)", "total_equity", "FY26"),
-        ("denominator (prior year end)", "total_equity", "FY25"),
+        ("denominator (current year end)", "equity_attributable_to_owners", "FY26"),
+        ("denominator (prior year end)", "equity_attributable_to_owners", "FY25"),
     ]
-    assert r.denominator_value == 102124.5
-    assert "(total_equity[FY26] + total_equity[FY25]) / 2" in r.formula
+    assert r.denominator_value == 100998            # (107240 + 94756) / 2, PDF p.166
+    assert "(equity_attributable_to_owners[FY26] + equity_attributable_to_owners[FY25]) / 2" in r.formula
 
 
 def test_return_on_equity_fy25_needs_fy24_equity(manual):

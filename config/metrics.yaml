@@ -72,6 +72,17 @@ metrics:
       INCLUDES non-controlling interests (the line is equity attributable to
       shareholders of the Company plus non-controlling interests).
 
+  equity_attributable_to_owners:
+    display_name: Equity attributable to shareholders of the Company
+    statement: balance_sheet
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 0
+    definition: >-
+      "Equity attributable to shareholders of the Company" as reported on the Balance Sheet at the
+      period end date: share capital plus other equity. EXCLUDES non-controlling interests
+      (total_equity = this + non_controlling_interests).
+
   cash_and_equivalents:
     display_name: Cash and cash equivalents
     statement: balance_sheet

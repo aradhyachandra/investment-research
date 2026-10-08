@@ -1,6 +1,6 @@
 # D1: new facts for the author to verify
 
-40 new facts (20 metrics x FY26 and FY25) in `data/manual/financials_tcs.csv`, all read by Claude
+42 new facts (21 metrics x FY26 and FY25) in `data/manual/financials_tcs.csv`, all read by Claude
 from `data/raw/tcs_annual_report_FY26.pdf` (consolidated, Ind AS) on 2026-10-08. Each row has
 `entered_by = Claude` and blank `verified_by` / `verified_on`. The 12 rows you signed off on
 2026-10-07 are unchanged.
@@ -80,3 +80,11 @@ checks that both are filled and that the verifier is not `Claude`.
 
 Every requested line was read; the only text-layer problems were split digits (" 9 453", "1, 82, 37 2")
 and the H glyph for the rupee sign, and each affected figure was settled by a total or a note.
+
+## Added after review: PDF page 166 (printed 196), Balance Sheet, equity section
+
+| Metric | FY26 | FY25 | Where on the page |
+|---|---|---|---|
+| equity_attributable_to_owners | 1,07,240 | 94,756 | "Equity attributable to shareholders of the Company", just above Non-controlling interests |
+
+Check: 1,07,240 + 1,238 (non-controlling interests) = 1,08,478 total equity, and 94,756 + 1,015 = 95,771; the loader checks this identity. Return on equity now divides by the average of this line (formula_version return_on_equity.v2), so both the profit and the equity exclude non-controlling interests.

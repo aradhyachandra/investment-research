@@ -116,16 +116,16 @@ ratios:
     display_name: Return on equity
     kind: quotient
     numerator: profit_attributable_to_owners
-    denominator: {average: total_equity}
-    denominator_label: Average total equity
+    denominator: {average: equity_attributable_to_owners}
+    denominator_label: Average equity attributable to shareholders
     multiplier: 100
     unit: PERCENT
-    formula_version: return_on_equity.v1
+    formula_version: return_on_equity.v2
     definition: >-
-      Profit attributable to shareholders of the Company divided by the average of total equity
-      at this year end and the previous year end, as a percentage. Basis: statutory, after
-      exceptional items. Total equity includes non-controlling interests while the profit
-      excludes their share (a small mismatch, kept as specified). Needs two year-end balance
+      Profit attributable to shareholders of the Company divided by the average of equity
+      attributable to shareholders of the Company at this year end and the previous year end, as a
+      percentage. Both sides exclude non-controlling interests (v1 divided by total equity including
+      them). Basis: statutory, after exceptional items. Needs two year-end balance
       sheets, so the earliest loaded year cannot be computed. Note: TCS's own headline margins
       in its fact sheets exclude exceptional items.
 
