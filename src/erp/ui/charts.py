@@ -23,9 +23,9 @@ def _style(chart: alt.Chart) -> alt.Chart:
 
 
 def scenario_chart(bars: list[ScenarioBar]) -> alt.Chart:
-    df = pd.DataFrame([{"Scenario": b.scenario, "Value": b.value, "Label": b.display, "Description": b.label}
+    df = pd.DataFrame([{"Scenario": b.name, "Value": b.value, "Label": b.display, "Description": b.label}
                        for b in bars])
-    order = [b.scenario for b in bars]
+    order = [b.name for b in bars]
     base = alt.Chart(df).encode(
         x=alt.X("Scenario:N", sort=order, title=None, axis=alt.Axis(labelAngle=0, labelFontSize=13)),
         y=alt.Y("Value:Q", title="INR per share", axis=alt.Axis(format=",.0f", grid=True, gridColor="#eeede9")),

@@ -282,6 +282,29 @@ def test_dcf_tab_view(toy_env):
     assert v.errors == []
 
 
+def test_dcf_tab_uses_display_labels_and_leads_with_firm_level_figures(toy_env):
+    labels = {"bear": "Low growth", "base": "Central", "bull": "High growth"}
+    v = dcf_view.build_dcf_tab(toy_env, ["bear", "base", "bull"], base="base",
+                               assumptions_file=toy_env.dcf_assumptions, footer=FOOTER, labels=labels)
+    assert [(b.scenario, b.name) for b in v.scenarios] == [("bear", "Low growth"), ("base", "Central")]
+    assert v.base_name == "Central"
+    assert [h.label for h in v.headline] == ["Enterprise value", "Equity value", "Terminal value share of EV", "WACC"]
+    val = v.base_detail["valuation"]
+    assert v.headline[3].display == "12.00%"                     # toy WACC = 7% + 1.0 x 5%
+    assert v.headline[2].display == f"{val['tv_share_of_ev'] * 100:.2f}%"
+
+
+def test_dcf_tab_without_labels_falls_back_to_scenario_keys(toy_env):
+    v = dcf_view.build_dcf_tab(toy_env, ["base"], base="base", assumptions_file=toy_env.dcf_assumptions, footer=FOOTER)
+    assert v.scenarios[0].name == "base" and v.base_name == "base"
+
+
+def test_ui_config_labels_cover_every_shown_scenario():
+    cfg = UI_CFG["dcf"]
+    assert set(cfg["scenarios"]) <= set(cfg["labels"])
+    assert not any(w in " ".join(cfg["labels"].values()).lower() for w in ("bear", "bull", "target"))
+
+
 def test_dcf_tab_reports_a_failing_scenario(toy_env):
     v = dcf_view.build_dcf_tab(toy_env, ["base", "nonexistent"], base="base",
                                assumptions_file=toy_env.dcf_assumptions, footer=FOOTER)

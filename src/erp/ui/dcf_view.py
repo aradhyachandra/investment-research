@@ -19,7 +19,8 @@ from erp.ui.view_model import DCFPath, dcf_path
 
 
 class ScenarioBar(BaseModel):
-    scenario: str
+    scenario: str                     # key in the assumptions file (e.g. "bear")
+    name: str                         # display name from config/ui.yaml (e.g. "Low growth")
     label: str                        # the scenario's description from the assumptions file
     value: float                      # engine value per share (for the bar length)
     display: str
@@ -45,8 +46,15 @@ class WaterfallStep(BaseModel):
     display: str                      # the engine's value for this item
 
 
+class HeadlineFigure(BaseModel):
+    label: str
+    display: str                      # engine output, formatted by tools.format_number
+
+
 class DCFTabView(BaseModel):
     scenarios: list[ScenarioBar]
+    base_name: str = ""               # display name of the base scenario
+    headline: list[HeadlineFigure] = []   # firm-level figures of the base scenario, shown before per-share values
     base: DCFPath | None              # full calculation path of the base scenario
     base_detail: dict | None          # run_dcf output of the base scenario
     heatmap: list[HeatCell]
@@ -97,7 +105,19 @@ def waterfall_steps(detail: dict, display: dict) -> list[WaterfallStep]:
     return steps
 
 
-def build_dcf_tab(env: ToolEnv, scenarios: list[str], *, base: str, assumptions_file, footer: str) -> DCFTabView:
+def headline_figures(detail: dict, display: dict) -> list[HeadlineFigure]:
+    """Firm-level outputs of one run: enterprise value, equity value, TV share of EV, WACC."""
+    v, money = detail["valuation"], detail["units"]["money"]
+    return [HeadlineFigure(label="Enterprise value", display=format_number(v["enterprise_value"], money, display)),
+            HeadlineFigure(label="Equity value", display=format_number(v["equity_value"], money, display)),
+            HeadlineFigure(label="Terminal value share of EV",
+                           display=format_number(v["tv_share_of_ev"] * 100, "PERCENT", display)),
+            HeadlineFigure(label="WACC", display=format_number(v["wacc"] * 100, "PERCENT", display))]
+
+
+def build_dcf_tab(env: ToolEnv, scenarios: list[str], *, base: str, assumptions_file, footer: str,
+                  labels: dict | None = None) -> DCFTabView:
+    labels = labels or {}
     errors, bars, base_result = [], [], None
     if not Path(assumptions_file).is_file():
         errors.append(f"DCF assumptions file {Path(assumptions_file).name} not found, so no DCF can be shown.")
@@ -109,7 +129,7 @@ def build_dcf_tab(env: ToolEnv, scenarios: list[str], *, base: str, assumptions_
                 continue
             d = r.detail
             per_share = next(n for n in r.numbers if n.number_id.endswith("#value_per_share"))
-            bars.append(ScenarioBar(scenario=name, label=d["description"], value=per_share.value,
+            bars.append(ScenarioBar(scenario=name, name=labels.get(name, name), label=d["description"], value=per_share.value,
                                     display=per_share.display, run_id=d["run_id"]))
             if name == base:
                 base_result = r
@@ -119,6 +139,7 @@ def build_dcf_tab(env: ToolEnv, scenarios: list[str], *, base: str, assumptions_
         return DCFTabView(scenarios=bars, base=None, base_detail=None, heatmap=[], waterfall=[],
                           per_share_unit=None, errors=errors)
     d = base_result.detail
-    return DCFTabView(scenarios=bars, base=dcf_path(base_result, env.display, assumptions_file, footer),
+    return DCFTabView(scenarios=bars, base_name=labels.get(base, base), headline=headline_figures(d, env.display),
+                      base=dcf_path(base_result, env.display, assumptions_file, footer),
                       base_detail=d, heatmap=heatmap_cells(d, env.display), waterfall=waterfall_steps(d, env.display),
                       per_share_unit=d["per_share_unit"], errors=errors)

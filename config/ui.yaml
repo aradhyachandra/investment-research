@@ -59,6 +59,10 @@ snapshot:
 dcf:
   scenarios: [bear, base, bull]
   base: base
+  # Display names only. The scenario keys in data/manual/dcf_inputs.yaml (bear/base/bull) stay as they are,
+  # because the router, the eval questions and past dcf_run rows use them. The names describe the
+  # assumptions, not the market.
+  labels: {bear: "Low growth", base: "Central", bull: "High growth"}
 
 # Source page preview: where the PDFs are on this machine (the private data checkout).
 raw_dir: data/raw

@@ -442,7 +442,7 @@ def _dcf(db_path: str, db_mtime: float, assumptions: str, a_mtime: float, ui_cfg
     try:
         env = env_for(conn, agent_cfg).model_copy(update={"dcf_assumptions": Path(assumptions)})
         return build_dcf_tab(env, ui_cfg["dcf"]["scenarios"], base=ui_cfg["dcf"]["base"], assumptions_file=assumptions,
-                             footer=" ".join(agent_cfg["dcf_footer"].split()))
+                             footer=" ".join(agent_cfg["dcf_footer"].split()), labels=ui_cfg["dcf"].get("labels"))
     finally:
         conn.close()
 
@@ -464,16 +464,11 @@ def dcf_tab(db_path: Path, ui_cfg: dict, agent_cfg: dict) -> None:
     st.caption(f"Scenario set: {md_escape(p.scenario_label)} · valuation date {p.valuation_date}. "
                "These are what the stated assumptions imply, computed by the DCF engine; not a forecast.")
 
-    left, right = st.columns(2)
-    with left:
-        st.markdown("**Value per share implied by each scenario's assumptions**")
-        st.altair_chart(charts.scenario_chart(v.scenarios), width="stretch")
-        dcf_footer(footer)
-    with right:
-        st.markdown(f"**Sensitivity of the {ui_cfg['dcf']['base']} scenario's value per share** "
-                    "(rows: WACC, columns: terminal growth; outlined: the scenario's own inputs)")
-        st.altair_chart(charts.heatmap_chart(v.heatmap), width="stretch")
-        dcf_footer(footer)
+    st.markdown(f"**{md_escape(v.base_name)} scenario: firm-level results**")
+    cols = st.columns(len(v.headline) or 1)
+    for col, h in zip(cols, v.headline):
+        col.metric(h.label, h.display)
+    dcf_footer(footer)
 
     st.markdown("**From enterprise value to equity value**")
     st.altair_chart(charts.waterfall_chart(v.waterfall, f"{v.base_detail['units']['money'].replace('_', ' ')}"),
@@ -483,13 +478,27 @@ def dcf_tab(db_path: Path, ui_cfg: dict, agent_cfg: dict) -> None:
                f"value per share {bridge['Value per share']} (engine output).")
     dcf_footer(footer)
 
-    st.markdown("**Assumptions** (base scenario; values as written in the assumptions file, rates are decimals)")
+    left, right = st.columns(2)
+    with left:
+        st.markdown("**Value per share implied by each scenario's assumptions** (what the assumptions imply, not a forecast)")
+        st.altair_chart(charts.scenario_chart(v.scenarios), width="stretch")
+        dcf_footer(footer)
+    with right:
+        st.markdown(f"**Sensitivity of the {md_escape(v.base_name)} scenario's value per share** "
+                    "(rows: WACC, columns: terminal growth; outlined: the scenario's own inputs)")
+        st.altair_chart(charts.heatmap_chart(v.heatmap), width="stretch")
+        dcf_footer(footer)
+
+    st.markdown(f"**Assumptions** ({md_escape(v.base_name)} scenario; values as written in the assumptions file, rates are decimals)")
     st.dataframe(pd.DataFrame([{"Assumption": a.name, "Value": a.value, "Rationale": a.rationale, "Source": a.source,
                                 "Defined in": a.defined_in} for a in p.assumptions]),
                  hide_index=True, width="stretch",
                  column_config={"Rationale": st.column_config.TextColumn(width="large")})
-    st.caption("Bear and bull override some of these; see `data/manual/dcf_inputs.yaml`.")
-    with st.expander("Full calculation path (base scenario)"):
+    names = ui_cfg["dcf"].get("labels", {})
+    others = " and ".join(names.get(s, s) for s in ui_cfg["dcf"]["scenarios"] if s != ui_cfg["dcf"]["base"])
+    st.caption(f"The {others} scenarios override some of these; see `data/manual/dcf_inputs.yaml` "
+               "(where they are keyed bear / base / bull).")
+    with st.expander(f"Full calculation path ({md_escape(v.base_name)} scenario)"):
         show_dcf_tables(p)
 
 
