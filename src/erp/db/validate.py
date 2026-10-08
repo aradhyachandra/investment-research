@@ -109,6 +109,9 @@ def check_fact(fact: Fact, ctx: LoadContext) -> list[str]:
         errors.append("value does not equal reported_value * conversion_factor")
     if not fact.source_page or fact.source_page < 1:
         errors.append("source_page missing")
+    if metric.get("sign") == "outflow_positive" and fact.value < 0:
+        errors.append(f"{fact.metric_id} is a cash outflow and must be stored as a positive amount "
+                      f"(the statement prints it in brackets), got {fact.value:,}")
     band = ctx.bands[fact.metric_id]
     if not band["min"] <= fact.value <= band["max"]:
         errors.append(

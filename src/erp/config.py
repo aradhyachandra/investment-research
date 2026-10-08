@@ -17,6 +17,7 @@ METRICS_CONFIG = REPO / "config" / "metrics.yaml"
 HASHES_FILE = REPO / "sources_hashes.txt"
 
 METRIC_FIELDS = ("display_name", "statement", "unit_kind", "canonical_unit", "is_flow", "definition")
+METRIC_SIGNS = ("outflow_positive",)   # optional metric field `sign`
 ACCOUNTING_STANDARDS = ("Ind AS", "IFRS")
 
 
@@ -33,6 +34,7 @@ class LoadContext:
     bands: dict            # metric_id -> {'min': .., 'max': ..} in canonical unit
     reporting_rounding: dict = None        # reported unit -> printing step, in that unit
     primary_accounting_standard: str = None  # standard used by lookups unless told otherwise
+    cross_foot_checks: list = None         # identities checked at load time (erp/db/crossfoot.py)
 
 
 def _read_yaml(path) -> dict:
@@ -74,6 +76,22 @@ def _check_source_standard(name: str, s: dict) -> None:
                 if page in seen:
                     raise ConfigError(f"source {name!r}: page {page} listed as both {seen[page]} and {std}")
                 seen[page] = std
+
+
+def _check_cross_foot_config(checks: list, metrics: dict) -> list:
+    """Each identity: a name, a total metric and at least one part {metric, sign: 1 or -1}."""
+    for c in checks:
+        name = c.get("name")
+        parts = c.get("parts") or []
+        if not name or not c.get("total") or not parts:
+            raise ConfigError(f"cross_foot_checks: each check needs name, total and parts, got {c!r}")
+        for metric_id in [c["total"], *(p.get("metric") for p in parts)]:
+            if metric_id not in metrics:
+                raise ConfigError(f"cross_foot_checks {name!r}: {metric_id!r} is not a metric in metrics.yaml")
+        for p in parts:
+            if p.get("sign") not in (1, -1):
+                raise ConfigError(f"cross_foot_checks {name!r}: sign of {p['metric']!r} must be 1 or -1")
+    return checks
 
 
 def accounting_standard_for(source: dict, page: int) -> str | None:
@@ -127,6 +145,8 @@ def load_context(company_config, metrics_config, hashes_file, raw_dir=None) -> L
         missing = [k for k in METRIC_FIELDS if k not in m]
         if missing:
             raise ConfigError(f"metric {metric_id!r} missing fields: {missing}")
+        if "sign" in m and m["sign"] not in METRIC_SIGNS:
+            raise ConfigError(f"metric {metric_id!r}: sign {m['sign']!r} is not one of {METRIC_SIGNS}")
 
     bands = cfg.get("plausibility_bands", {})
     no_band = sorted(set(metrics) - set(bands))
@@ -139,6 +159,8 @@ def load_context(company_config, metrics_config, hashes_file, raw_dir=None) -> L
     standard = cfg.get("primary_accounting_standard")
     if standard not in ACCOUNTING_STANDARDS:
         raise ConfigError(f"primary_accounting_standard must be one of {ACCOUNTING_STANDARDS}, got {standard!r}")
+
+    cross_foot_checks = _check_cross_foot_config(cfg.get("cross_foot_checks") or [], metrics)
 
     fy_end = cfg["company"]["fiscal_year_end_month"]
     hashes = read_source_hashes(hashes_file)
@@ -167,6 +189,7 @@ def load_context(company_config, metrics_config, hashes_file, raw_dir=None) -> L
         bands=bands,
         reporting_rounding=rounding,
         primary_accounting_standard=standard,
+        cross_foot_checks=cross_foot_checks,
     )
 
 

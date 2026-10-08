@@ -10,8 +10,10 @@ Optional CSV columns restated / supersedes_source_doc: mark a restatement. The s
 several documents is allowed only if the figures agree (see erp/db/duplicates.py).
 
 Run from the repo root:
-    PYTHONPATH=src python -m erp.db.load_facts --csv data/sample/facts_sample.csv \
+    PYTHONPATH=src python -m erp.db.load_facts --csv data/manual/financials_tcs.csv \
         --entry-method llm_extracted --db data/db/sample.sqlite --replace
+
+(data/sample/facts_sample.csv, the 12 signed-off sample facts, still loads the same way.)
 """
 import argparse
 import csv
@@ -20,6 +22,7 @@ import sys
 from pathlib import Path
 
 from erp.config import LoadContext, load_context
+from erp.db.crossfoot import check_cross_foots
 from erp.db.duplicates import check_duplicates
 from erp.db.validate import Fact, validate_rows
 
@@ -95,6 +98,9 @@ def load_rows(conn: sqlite3.Connection, rows: list[dict], ctx: LoadContext, entr
     facts, errors = validate_rows(rows, ctx)
     if errors:
         raise LoadError(errors)
+    errors = check_cross_foots(facts, ctx)
+    if errors:
+        raise LoadError(errors)
 
     keyed = [(f, _ids(conn, f)) for f in facts]
     for f, (company_id, period_id, source_id) in keyed:
@@ -150,13 +156,13 @@ def print_summary(conn: sqlite3.Connection) -> None:
             "SELECT source_id, doc_type, title, sha256 FROM source_document ORDER BY source_id"):
         print(f"  [{sid}] {doc_type:<14} {title}  (sha256 {sha[:12]}...)")
     print("\nFacts loaded:")
-    print(f"  {'metric':<26}{'period':<8}{'value':>14}  {'unit':<15}{'page (printed)':<16}entry / verified")
+    print(f"  {'metric':<42}{'period':<8}{'value':>14}  {'unit':<15}{'page (printed)':<16}entry / verified")
     for metric, label, value, unit, page, plabel, method, verified in conn.execute(
             "SELECT f.metric_id, p.label, f.value, f.unit, f.source_page, f.source_page_label,"
             " f.entry_method, f.verified_by FROM fact f JOIN period p USING (period_id)"
             " ORDER BY f.metric_id, p.end_date"):
         page_text = f"{page} ({plabel})" if plabel else str(page)
-        print(f"  {metric:<26}{label:<8}{value:>14,.2f}  {unit:<15}{page_text:<16}{method} / {verified or 'NOT VERIFIED'}")
+        print(f"  {metric:<42}{label:<8}{value:>14,.2f}  {unit:<15}{page_text:<16}{method} / {verified or 'NOT VERIFIED'}")
     total, unverified = conn.execute(
         "SELECT COUNT(*), SUM(verified_by IS NULL) FROM fact").fetchone()
     print(f"\n{total} facts loaded, {unverified} not yet verified by a human.")

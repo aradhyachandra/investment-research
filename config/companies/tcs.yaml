@@ -90,6 +90,28 @@ plausibility_bands:
   eps_basic:               {min: 40,     max: 400}
   total_equity:            {min: 40000,  max: 400000}
   cash_and_equivalents:    {min: 1000,   max: 60000}
+  # D1 additions. Small or lumpy lines get wider bands; exceptional items and the cash outflows
+  # may be 0 in a year (min 0). A negative outflow is rejected separately (metric `sign`).
+  other_income:            {min: 1000,   max: 15000}
+  finance_costs:           {min: 100,    max: 5000}
+  depreciation_amortisation: {min: 2000, max: 15000}
+  profit_before_exceptional_items_and_tax: {min: 25000, max: 180000}
+  exceptional_restructuring_expenses: {min: 0, max: 15000}
+  exceptional_labour_codes_impact:    {min: 0, max: 15000}
+  exceptional_legal_claim_provision:  {min: 0, max: 15000}
+  profit_before_tax:       {min: 20000,  max: 180000}
+  tax_expense:             {min: 5000,   max: 50000}
+  total_assets:            {min: 60000,  max: 500000}
+  current_investments:     {min: 5000,   max: 100000}
+  non_current_investments: {min: 0,      max: 5000}
+  other_balances_with_banks: {min: 1000, max: 30000}
+  lease_liabilities_current: {min: 300,  max: 6000}
+  lease_liabilities_non_current: {min: 2000, max: 30000}
+  non_controlling_interests: {min: 200,  max: 5000}
+  shares_outstanding:      {min: 150,    max: 800}      # SHARES_CRORE
+  cash_from_operations:    {min: 15000,  max: 150000}
+  purchase_of_ppe:         {min: 500,    max: 15000}
+  purchase_of_intangibles: {min: 0,      max: 5000}
 
 # How finely each reported unit is printed in TCS documents, in that unit. Two figures for the
 # same fact (after converting to the canonical unit) "agree" if they differ by no more than
@@ -100,6 +122,27 @@ reporting_rounding:
   INR_CRORE: 1
   INR_MILLION: 1
   INR_PER_SHARE: 0.01
+  SHARES: 1                 # share counts are printed in full (note 8(m))
+
+# Cross-foot identities checked at load time (D1). For every period, basis and source document
+# where the total and ALL parts are in the CSV being loaded: total = sum(sign x part), within
+# the printing rounding of all the figures involved (half a step each). If any figure is
+# missing, that identity is skipped for that period (not an error).
+# Not checked yet (metrics not keyed): assets = equity + liabilities (no liabilities metric);
+# opening cash + net change + FX difference = closing cash (no net change / FX metrics).
+cross_foot_checks:
+  - name: profit_before_tax
+    total: profit_before_tax
+    parts:
+      - {metric: profit_before_exceptional_items_and_tax, sign: 1}
+      - {metric: exceptional_restructuring_expenses, sign: -1}
+      - {metric: exceptional_labour_codes_impact, sign: -1}
+      - {metric: exceptional_legal_claim_provision, sign: -1}
+  - name: profit_for_the_year
+    total: profit_after_tax
+    parts:
+      - {metric: profit_before_tax, sign: 1}
+      - {metric: tax_expense, sign: -1}
 
 # Refusal pre-check (M6, src/erp/agent/guardrails.py): v1 covers TCS only, so a question naming
 # one of these companies is refused as "other_company" before the router runs. A backstop, not a

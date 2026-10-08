@@ -1,0 +1,53 @@
+ticker,metric_id,period,basis,reported_value,reported_unit,source_doc,source_page,source_page_label,entered_by,verified_by,verified_on
+TCS,revenue_from_operations,FY26,consolidated,267021,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,Aradhya Chandra,2026-10-07
+TCS,revenue_from_operations,FY25,consolidated,255324,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,Aradhya Chandra,2026-10-07
+TCS,profit_after_tax,FY26,consolidated,49454,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,Aradhya Chandra,2026-10-07
+TCS,profit_after_tax,FY25,consolidated,48797,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,Aradhya Chandra,2026-10-07
+TCS,eps_basic,FY26,consolidated,136.01,INR_PER_SHARE,tcs_annual_report_FY26.pdf,167,197,Claude,Aradhya Chandra,2026-10-07
+TCS,eps_basic,FY25,consolidated,134.19,INR_PER_SHARE,tcs_annual_report_FY26.pdf,167,197,Claude,Aradhya Chandra,2026-10-07
+TCS,total_equity,FY26,consolidated,108478,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude,Aradhya Chandra,2026-10-07
+TCS,total_equity,FY25,consolidated,95771,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude,Aradhya Chandra,2026-10-07
+TCS,cash_and_equivalents,FY26,consolidated,6417,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude,Aradhya Chandra,2026-10-07
+TCS,cash_and_equivalents,FY25,consolidated,8342,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude,Aradhya Chandra,2026-10-07
+TCS,profit_attributable_to_owners,FY26,consolidated,49210,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,Aradhya Chandra,2026-10-07
+TCS,profit_attributable_to_owners,FY25,consolidated,48553,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,Aradhya Chandra,2026-10-07
+TCS,other_income,FY26,consolidated,4402,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,,
+TCS,other_income,FY25,consolidated,3962,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,,
+TCS,finance_costs,FY26,consolidated,1227,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,,
+TCS,finance_costs,FY25,consolidated,796,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,,
+TCS,depreciation_amortisation,FY26,consolidated,5560,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,,
+TCS,depreciation_amortisation,FY25,consolidated,5242,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,,
+TCS,profit_before_exceptional_items_and_tax,FY26,consolidated,70013,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,,
+TCS,profit_before_exceptional_items_and_tax,FY25,consolidated,65331,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,,
+TCS,exceptional_restructuring_expenses,FY26,consolidated,1388,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,,
+TCS,exceptional_restructuring_expenses,FY25,consolidated,0,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,,
+TCS,exceptional_labour_codes_impact,FY26,consolidated,2128,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,,
+TCS,exceptional_labour_codes_impact,FY25,consolidated,0,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,,
+TCS,exceptional_legal_claim_provision,FY26,consolidated,1010,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,,
+TCS,exceptional_legal_claim_provision,FY25,consolidated,0,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,,
+TCS,profit_before_tax,FY26,consolidated,65487,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,,
+TCS,profit_before_tax,FY25,consolidated,65331,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,,
+TCS,tax_expense,FY26,consolidated,16033,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,,
+TCS,tax_expense,FY25,consolidated,16534,INR_CRORE,tcs_annual_report_FY26.pdf,167,197,Claude,,
+TCS,non_current_investments,FY26,consolidated,218,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude,,
+TCS,non_current_investments,FY25,consolidated,275,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude,,
+TCS,current_investments,FY26,consolidated,33770,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude,,
+TCS,current_investments,FY25,consolidated,30689,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude,,
+TCS,other_balances_with_banks,FY26,consolidated,6491,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude,,
+TCS,other_balances_with_banks,FY25,consolidated,7121,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude,,
+TCS,total_assets,FY26,consolidated,182372,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude,,
+TCS,total_assets,FY25,consolidated,159629,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude,,
+TCS,non_controlling_interests,FY26,consolidated,1238,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude,,
+TCS,non_controlling_interests,FY25,consolidated,1015,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude,,
+TCS,lease_liabilities_non_current,FY26,consolidated,9453,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude,,
+TCS,lease_liabilities_non_current,FY25,consolidated,7838,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude,,
+TCS,lease_liabilities_current,FY26,consolidated,1830,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude,,
+TCS,lease_liabilities_current,FY25,consolidated,1554,INR_CRORE,tcs_annual_report_FY26.pdf,166,196,Claude,,
+TCS,cash_from_operations,FY26,consolidated,52094,INR_CRORE,tcs_annual_report_FY26.pdf,172,202,Claude,,
+TCS,cash_from_operations,FY25,consolidated,48908,INR_CRORE,tcs_annual_report_FY26.pdf,172,202,Claude,,
+TCS,purchase_of_ppe,FY26,consolidated,3670,INR_CRORE,tcs_annual_report_FY26.pdf,172,202,Claude,,
+TCS,purchase_of_ppe,FY25,consolidated,2917,INR_CRORE,tcs_annual_report_FY26.pdf,172,202,Claude,,
+TCS,purchase_of_intangibles,FY26,consolidated,367,INR_CRORE,tcs_annual_report_FY26.pdf,172,202,Claude,,
+TCS,purchase_of_intangibles,FY25,consolidated,944,INR_CRORE,tcs_annual_report_FY26.pdf,172,202,Claude,,
+TCS,shares_outstanding,FY26,consolidated,3618087518,SHARES,tcs_annual_report_FY26.pdf,196,226,Claude,,
+TCS,shares_outstanding,FY25,consolidated,3618087518,SHARES,tcs_annual_report_FY26.pdf,196,226,Claude,,

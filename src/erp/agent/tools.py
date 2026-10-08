@@ -210,6 +210,15 @@ def _ratio_tool(a: RatioArgs, env: ToolEnv) -> ToolResult:
     numbers = [_number(calc_id, "value", f"{r.display_name}, {r.period_label} ({r.basis})", r.value, r.unit,
                        r.period_label, r.basis, env.display, quantity=r.ratio_id,
                        measures_change=load_ratios()[r.ratio_id]["kind"] == "yoy_growth")]
+    # A sum or average operand (e.g. EBIT, average equity) is a figure code computed, so it is a
+    # tool number too: an answer may quote it, and the verifier can check it.
+    spec = load_ratios()[r.ratio_id]
+    for side in ("numerator", "denominator"):
+        if spec["kind"] == "quotient" and not isinstance(spec[side], str):
+            name = getattr(r, f"{side}_label") or side
+            numbers.append(_number(calc_id, side, f"{name}, {r.period_label} ({r.basis}; {side} of {r.display_name})",
+                                   getattr(r, f"{side}_value"), facts[0].unit, r.period_label, r.basis, env.display,
+                                   quantity=f"{r.ratio_id}.{side}"))
     for i, ev in zip(r.inputs, fact_evs):
         f = i.fact
         numbers.append(_number(ev.evidence_id, "value", f"{names.get(f.metric_id, f.metric_id)}, {f.period_label} "

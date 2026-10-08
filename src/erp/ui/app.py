@@ -44,7 +44,7 @@ from erp.ui.view_model import (
 
 QUESTIONS_FILE = REPO / "eval" / "questions.jsonl"
 COMPANY_CONFIG_DIR = REPO / "config" / "companies"
-BUILD_DB_HINT = ("PYTHONPATH=src .venv/bin/python -m erp.db.load_facts --csv data/sample/facts_sample.csv "
+BUILD_DB_HINT = ("PYTHONPATH=src .venv/bin/python -m erp.db.load_facts --csv data/manual/financials_tcs.csv "
                  "--entry-method llm_extracted --replace")
 
 

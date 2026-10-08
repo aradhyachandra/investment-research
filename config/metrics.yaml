@@ -1,6 +1,10 @@
 # Metric definitions -> seeded into the `metric` table.
-# Only the metrics used by data/sample/facts_sample.csv are defined so far.
-# The full v1 list (PROJECT_PLAN.md Section 4.2) is added when the full dataset exists.
+# The first six are the signed-off sample metrics (data/sample/facts_sample.csv). The rest were
+# added in D1 (data/manual/financials_tcs.csv), read from the FY26 annual report. Still missing
+# from the plan's v1 list (Section 4.2): total_expenses, employee_benefit_expense, eps_diluted,
+# borrowings, dividends_paid, share_buybacks, diluted_shares, headcount, attrition_percent.
+# Calculated figures (EBIT, total capex, total exceptional items, average equity) are NOT
+# metrics: they are built in code from these facts (config/ratios.yaml).
 #
 # Fields:
 #   statement      income | balance_sheet | cash_flow | other
@@ -8,6 +12,8 @@
 #   canonical_unit INR_CRORE | INR_PER_SHARE | SHARES_CRORE | PERCENT | COUNT | DAYS
 #   is_flow        1 = measured over a period, 0 = point in time (balance sheet date)
 #   definition     exactly what the line includes / excludes
+#   sign           optional. outflow_positive = a cash outflow the statement prints in brackets,
+#                  stored as a positive amount; the loader rejects a negative value.
 
 metrics:
   revenue_from_operations:
@@ -75,4 +81,230 @@ metrics:
     definition: >-
       "Cash and cash equivalents" as reported on the Balance Sheet at the period
       end date. Excludes "Other balances with banks" and investments, which are
-      separate lines (treasury investments will be the other_investments metric).
+      separate lines (see other_balances_with_banks, current_investments and
+      non_current_investments).
+
+  # ---------- D1 additions (FY26 annual report, consolidated, Ind AS) ----------
+
+  # Statement of Profit and Loss
+  other_income:
+    display_name: Other income
+    statement: income
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    definition: >-
+      "Other income" as reported on the face of the Statement of Profit and Loss (note 13):
+      mainly interest income on treasury investments and deposits, plus investment gains and
+      net foreign exchange gain or loss. Not part of revenue from operations.
+
+  finance_costs:
+    display_name: Finance costs
+    statement: income
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    definition: >-
+      "Finance costs" as reported on the Statement of Profit and Loss (note 16): interest on
+      lease liabilities, interest on tax matters and other interest costs.
+
+  depreciation_amortisation:
+    display_name: Depreciation and amortisation expense
+    statement: income
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    definition: >-
+      "Depreciation and amortisation expense" as reported on the Statement of Profit and Loss.
+      Includes depreciation of right-of-use (leased) assets and amortisation of intangibles.
+
+  profit_before_exceptional_items_and_tax:
+    display_name: Profit before exceptional items and tax
+    statement: income
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    definition: >-
+      "Profit before exceptional items and tax" as reported on the Statement of Profit and
+      Loss: total income (revenue from operations plus other income) minus total expenses.
+      Before exceptional items, so it is the starting point for EBIT (config/ratios.yaml).
+
+  exceptional_restructuring_expenses:
+    display_name: Exceptional items - re-structuring expenses
+    statement: income
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    definition: >-
+      The "Re-structuring expenses" line under "Exceptional items" on the Statement of Profit
+      and Loss (note 25), as a positive charge (it reduces profit). The statement prints no
+      total of the exceptional items; total = the three exceptional_* metrics together. A
+      year printed as "-" is stored as 0.
+
+  exceptional_labour_codes_impact:
+    display_name: Exceptional items - statutory impact of new Labour Codes
+    statement: income
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    definition: >-
+      The "Statutory impact of new Labour Codes" line under "Exceptional items" on the
+      Statement of Profit and Loss (note 26), as a positive charge (it reduces profit). A year
+      printed as "-" is stored as 0.
+
+  exceptional_legal_claim_provision:
+    display_name: Exceptional items - provision towards legal claim
+    statement: income
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    definition: >-
+      The "Provision towards legal claim" line under "Exceptional items" on the Statement of
+      Profit and Loss (note 20), as a positive charge (it reduces profit). A year printed as
+      "-" is stored as 0.
+
+  profit_before_tax:
+    display_name: Profit before tax
+    statement: income
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    definition: >-
+      "Profit before tax" as reported on the Statement of Profit and Loss: after exceptional
+      items, before tax expense. Profit before exceptional items and tax minus the exceptional
+      items.
+
+  tax_expense:
+    display_name: Tax expense
+    statement: income
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    definition: >-
+      "Total tax expense" as reported on the Statement of Profit and Loss (note 17): current
+      tax plus deferred tax for the year. Excludes income tax on other comprehensive income.
+      Not taxes paid in cash (that is a cash flow line).
+
+  # Balance Sheet (at the period end date)
+  total_assets:
+    display_name: Total assets
+    statement: balance_sheet
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 0
+    definition: >-
+      "TOTAL ASSETS" as reported on the Balance Sheet: total non-current assets plus total
+      current assets. Equals total equity plus total liabilities.
+
+  current_investments:
+    display_name: Investments (current)
+    statement: balance_sheet
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 0
+    definition: >-
+      "Investments" under current financial assets on the Balance Sheet (note 8(a)): treasury
+      investments such as government bonds, corporate bonds, mutual fund units, certificates
+      of deposit and commercial papers. Excludes cash and cash equivalents and other balances
+      with banks. Includes small amounts held by trusts for specified purposes (note 8(a)).
+
+  non_current_investments:
+    display_name: Investments (non-current)
+    statement: balance_sheet
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 0
+    definition: >-
+      "Investments" under non-current financial assets on the Balance Sheet (note 8(a)):
+      bonds carried at amortised cost and equity shares at fair value. In FY26 the whole
+      amount pertains to trusts held for specified purposes (note 8(a)).
+
+  other_balances_with_banks:
+    display_name: Other balances with banks
+    statement: balance_sheet
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 0
+    definition: >-
+      "Other balances with banks" under current financial assets on the Balance Sheet (note
+      8(d)): short-term bank deposits not counted as cash equivalents plus earmarked balances
+      (margin money, unclaimed dividends, regulatory backstop). Not cash and cash equivalents.
+
+  lease_liabilities_current:
+    display_name: Lease liabilities (current)
+    statement: balance_sheet
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 0
+    definition: >-
+      "Lease liabilities" under current financial liabilities on the Balance Sheet (due within
+      twelve months). Total lease liabilities = current + non-current (note 9).
+
+  lease_liabilities_non_current:
+    display_name: Lease liabilities (non-current)
+    statement: balance_sheet
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 0
+    definition: >-
+      "Lease liabilities" under non-current financial liabilities on the Balance Sheet (due
+      after twelve months). Total lease liabilities = current + non-current (note 9).
+
+  non_controlling_interests:
+    display_name: Non-controlling interests (equity)
+    statement: balance_sheet
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 0
+    definition: >-
+      "Non-controlling interests" within equity on the Balance Sheet: the part of subsidiaries'
+      equity not owned by the Company. Included in total_equity. Not the non-controlling
+      interests' share of profit (a Statement of Profit and Loss line).
+
+  shares_outstanding:
+    display_name: Equity shares outstanding (year end)
+    statement: other
+    unit_kind: shares
+    canonical_unit: SHARES_CRORE
+    is_flow: 0
+    definition: >-
+      Number of equity shares of INR 1 each issued, subscribed and fully paid up at the period
+      end date (note 8(m), "Closing balance"), in crore shares. Point in time, not the weighted
+      average used for EPS (in FY26 and FY25 the two are equal: note 8(m) shows no change in
+      the number of shares during either year).
+
+  # Statement of Cash Flows
+  cash_from_operations:
+    display_name: Net cash from operating activities
+    statement: cash_flow
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    definition: >-
+      "Net cash flows generated from operating activities" as reported on the Statement of Cash
+      Flows: after taxes paid (net of refunds), before investing and financing cash flows.
+
+  purchase_of_ppe:
+    display_name: Payment for purchase of property, plant and equipment
+    statement: cash_flow
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    sign: outflow_positive
+    definition: >-
+      "Payment for purchase of property, plant and equipment" under investing activities on the
+      Statement of Cash Flows, stored as a positive amount (the statement prints it in brackets
+      as an outflow). Excludes payments for right-of-use assets, intangible assets and
+      acquisitions of subsidiaries or assets (separate lines).
+
+  purchase_of_intangibles:
+    display_name: Payment for purchase of intangible assets
+    statement: cash_flow
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    sign: outflow_positive
+    definition: >-
+      "Payment for purchase of intangible assets" under investing activities on the Statement
+      of Cash Flows, stored as a positive amount (the statement prints it in brackets as an
+      outflow). Excludes intangibles acquired with subsidiaries.

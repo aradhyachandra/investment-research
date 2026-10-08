@@ -10,6 +10,7 @@ CONVERSIONS = {
     ("INR_CRORE", "INR_CRORE"): 1,
     ("INR_MILLION", "INR_CRORE"): 0.1,
     ("INR_PER_SHARE", "INR_PER_SHARE"): 1,
+    ("SHARES", "SHARES_CRORE"): 1e-7,   # share counts printed in full (D1); 1 crore = 10^7
 }
 
 

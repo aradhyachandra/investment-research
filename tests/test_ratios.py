@@ -171,8 +171,8 @@ def _no_rows_written(conn):
 
 
 def test_unknown_ratio_raises(loaded):
-    with pytest.raises(UnknownRatioError, match="operating_margin"):
-        compute_ratio(loaded, "TCS", "operating_margin", "FY26")
+    with pytest.raises(UnknownRatioError, match="ev_to_ebitda"):
+        compute_ratio(loaded, "TCS", "ev_to_ebitda", "FY26")
     assert _no_rows_written(loaded)
 
 
@@ -248,9 +248,12 @@ def test_growth_on_zero_or_negative_base_raises(prior):
 
 # ---------- ratio definitions come from config ----------
 
-def test_four_ratios_defined_in_config():
+def test_ratios_defined_in_config():
     ratios = load_ratios(RATIOS_CONFIG, METRICS_CONFIG)
-    assert set(ratios) == {"net_margin", "revenue_growth_yoy", "net_profit_growth_yoy", "eps_growth_yoy"}
+    assert set(ratios) == {"net_margin", "revenue_growth_yoy", "net_profit_growth_yoy", "eps_growth_yoy",
+                           # D1 (tests/test_d1_facts.py)
+                           "operating_margin", "effective_tax_rate", "return_on_equity", "capex_to_revenue",
+                           "ocf_to_profit", "da_to_revenue"}
     assert ratios["net_margin"]["numerator"] == "profit_attributable_to_owners"
     assert ratios["net_profit_growth_yoy"]["metric"] == "profit_attributable_to_owners"
     assert ratios["eps_growth_yoy"]["metric"] == "eps_basic"
@@ -263,10 +266,18 @@ def test_pat_ratios_are_gone(loaded):
 
 
 def test_ratio_definitions_state_the_exceptional_items_basis():
+    # Since D1 not every ratio is "after exceptional items" (operating margin is before them;
+    # capex and D&A ratios are not affected), but every definition must say which.
     for ratio_id, r in load_ratios(RATIOS_CONFIG, METRICS_CONFIG).items():
         text = " ".join(r["definition"].split())
-        assert "statutory, after exceptional items" in text, ratio_id
+        assert re.search(r"Basis: [^.]*(after exceptional items|before exceptional items|"
+                         r"not affected by exceptional items)", text), ratio_id
         assert "fact sheets exclude exceptional items" in text, ratio_id
+    defs = {k: " ".join(r["definition"].split()) for k, r in load_ratios(RATIOS_CONFIG, METRICS_CONFIG).items()}
+    for ratio_id in ("net_margin", "revenue_growth_yoy", "net_profit_growth_yoy", "eps_growth_yoy",
+                     "effective_tax_rate", "return_on_equity"):
+        assert "statutory, after exceptional items" in defs[ratio_id], ratio_id
+    assert "Basis: before exceptional items" in defs["operating_margin"]
 
 
 def _write_ratios(tmp_path, mutate):

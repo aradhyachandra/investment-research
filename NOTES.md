@@ -2,6 +2,27 @@
 
 Open questions, TO VERIFY items, and validation TODOs. Newest first.
 
+## D1 expanded facts (2026-10-08)
+
+- TO VERIFY (author): all 40 new rows in `data/manual/financials_tcs.csv` (checklist:
+  `docs/D1_facts_for_review.md`). Three have no independent cross-check in the report: purchase of
+  PP&E, purchase of intangibles, net cash from operating activities.
+- TO VERIFY: FY25 exceptional items printed as "-" are stored as 0 (dash read as nil).
+- TO VERIFY: operating_margin is our EBIT formula; TCS's own reported operating margin (fact sheet)
+  may be defined differently. Not compared.
+- TO VERIFY: plausibility bands for the 20 new metrics are engineering guards set by Claude (wider
+  for small, lumpy lines such as non-current investments and exceptional items).
+- Dividend per share: not in the statements/notes as a per-year total; ten-year summary (PDF 70)
+  prints 110.00 (FY26) and 126.00 (FY25); its basis (standalone or consolidated) is not stated
+  there. Not stored.
+- The annual report's revenue note prints FY26 revenue recognised as 2,67,022 (PDF 211) while the
+  P&L prints 2,67,021: rounding inside the note. Not a fact we store twice; noted only.
+- Lease interest FY25: 632 in note 16 (PDF 220) vs 631 in note 9 (PDF 200). Not stored; noted.
+- Load-time validation TODO list (below) updated: cross-foot checks now exist for PBT and profit for
+  the year; balance and cash roll-forward still need metrics.
+- Plan 10 open decision still open: may `data/manual/financials_tcs.csv` (52 AI-read figures with
+  page numbers) be in the public repo? It is not gitignored.
+
 ## M9 README, results, cleanup (2026-10-04)
 
 - **Plan conflict, flagged not resolved.** Plan 2.5 says no accuracy numbers go in the README until
@@ -423,7 +444,10 @@ Done in M1 (`src/erp/db/validate.py`, tested in `tests/test_load_facts.py`):
 - all-or-nothing: one bad row blocks the whole load
 
 TODO (need data we don't have yet):
-- [ ] Balance sheet: total assets = total equity + total liabilities (needs total_assets, liabilities)
+- [x] Cross-foot identities from config (D1): PBT = PBEIT - exceptional items; profit for the year
+      = PBT - tax expense (`src/erp/db/crossfoot.py`)
+- [ ] Balance sheet: total assets = total equity + total liabilities (total_assets exists since D1;
+      still needs a liabilities metric)
       -- the M1 acceptance test mentions "broken balance"; cannot be built until these metrics exist.
 - [ ] Cash flow: opening cash + net change = closing cash (needs cash-flow metrics)
 - [ ] Q1+Q2+Q3+Q4 = FY for flow metrics, tolerance ~0.1% (needs quarterly facts; tolerance TO VERIFY)

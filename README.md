@@ -93,17 +93,22 @@ in this repository: they live in a separate private data repository checked out 
 is the same file. The download URLs were not recorded (TO VERIFY; `url: null` in
 `config/companies/tcs.yaml`), so this README does not give links.
 
-**How facts were entered.** `data/sample/facts_sample.csv` holds 12 facts (revenue, profit after
-tax, profit attributable to shareholders, basic EPS, cash and cash equivalents, total equity; FY25
-and FY26) with the PDF page and printed page of each. They were read from the annual report by an AI
-assistant and loaded with `entry_method = llm_extracted`; **none has been verified by a human yet**
-(the loader prints "12 not yet verified by a human"). The fuller dataset the plan calls for (about 25
-metrics, FY21 onwards, quarters, hand-keyed and double-checked) does not exist yet.
+**How facts were entered.** `data/manual/financials_tcs.csv` holds 52 facts for FY25 and FY26 (26
+metrics from the income statement, balance sheet, cash flow statement and share capital note), each
+with the PDF page and printed page. All were read from the FY26 annual report by an AI assistant and
+are loaded with `entry_method = llm_extracted`. The 12 original sample facts (also in
+`data/sample/facts_sample.csv`: revenue, profit after tax, profit attributable to shareholders,
+basic EPS, cash and cash equivalents, total equity) were verified by the author on 2026-10-07; the
+40 added in D1 are **not yet verified by a human** (the loader prints the count). The fuller
+dataset the plan calls for (FY21 onwards, quarters, hand-keyed and double-checked) does not exist
+yet.
 
 **Checks at load time** (`src/erp/db/validate.py`): unit must be the metric's canonical unit, value
 must equal reported value times the conversion factor, every fact needs a source page, plausibility
 bands per metric, duplicates and disagreeing duplicates rejected, source PDFs re-hashed when present,
-one bad row blocks the whole load.
+cash outflows stored as positive amounts, cross-foot identities from the company config (profit
+before tax = profit before exceptional items - exceptional items; profit for the year = profit
+before tax - tax expense; `src/erp/db/crossfoot.py`), one bad row blocks the whole load.
 
 **Conventions.** Money in INR crore (1 crore = 10 million). Consolidated basis unless stated. Fiscal
 year runs April to March: FY26 = 1 April 2025 to 31 March 2026, which is not calendar 2026; Q1 FY27 =
@@ -243,9 +248,10 @@ This project was built with an AI coding assistant, milestone by milestone, from
   by the author as the working file on 2026-10-04. They **have not been reviewed by a finance
   partner**. DCF eval gold is the engine's own output on those assumptions, so it is a regression
   check, not independent truth.
-- **Facts** (12 in `data/sample/facts_sample.csv`) were read from the annual report by an AI
-  assistant; the author verified all 12 against the report pages on 2026-10-07 (`verified_by` and
-  `verified_on` in the CSV). No finance reviewer has checked them.
+- **Facts** (52 in `data/manual/financials_tcs.csv`) were read from the annual report by an AI
+  assistant; the author verified the original 12 against the report pages on 2026-10-07
+  (`verified_by` and `verified_on` in the CSV). The 40 added in D1 (2026-10-08) are not yet
+  verified. No finance reviewer has checked them.
 - **Runtime model:** `qwen2.5:3b` running locally through Ollama (chosen in a small test on an 8 GB
   MacBook Air; NOTES.md, P0.6). TO VERIFY: its licence. As far as known, the 3B size is under the
   "Qwen Research License" rather than Apache 2.0; fine for local personal use, to be checked before
@@ -294,7 +300,7 @@ Python 3.11+, other versions TO VERIFY).
 | Step | Without the PDFs and Ollama | Needs |
 |---|---|---|
 | Install, run the test suite | yes (tests use fakes; tests needing the PDFs or Ollama skip) | nothing |
-| Build the sample database from `data/sample/facts_sample.csv` | yes | nothing |
+| Build the database from `data/manual/financials_tcs.csv` | yes | nothing |
 | DCF engine on the assumptions file (`erp.dcf.run.run_dcf`, from Python; no CLI) | yes | the sample database |
 | UI in `--demo` mode | starts, but shows "no saved eval runs" | a saved eval run in `eval/results/dev/` |
 | Index the annual report into ChromaDB | no | the PDFs in `data/raw/` + Ollama with `nomic-embed-text` |
@@ -324,7 +330,7 @@ python3 -m venv .venv
 **3. Sample database** (writes `data/db/sample.sqlite`, gitignored)
 
 ```bash
-PYTHONPATH=src .venv/bin/python -m erp.db.load_facts --csv data/sample/facts_sample.csv --entry-method llm_extracted --replace
+PYTHONPATH=src .venv/bin/python -m erp.db.load_facts --csv data/manual/financials_tcs.csv --entry-method llm_extracted --replace
 ```
 
 **4. Documents and models** (needs the PDFs and Ollama)
@@ -388,8 +394,8 @@ scripts/clean_clone_check.sh --worktree
 README.md  PROJECT_PLAN.md  PROGRESS.md  NOTES.md  CLAUDE.md / AGENTS.md (instructions for coding tools)
 config/            company, metrics, ratios, DCF, ingest, agent, eval and UI settings (no code)
 data/
-  manual/          dcf_inputs.yaml (assumption register)
-  sample/          facts_sample.csv (12 facts, AI-read, not yet human-verified)
+  manual/          financials_tcs.csv (52 facts, AI-read; 12 verified by the author), dcf_inputs.yaml
+  sample/          facts_sample.csv (the original 12 facts, verified by the author)
   raw/             private data repo checkout with the PDFs (gitignored)
   db/, chroma/     local SQLite database and vector index (gitignored, rebuilt by commands above)
 src/erp/

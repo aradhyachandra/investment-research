@@ -2,7 +2,13 @@
 # The code only knows the two `kind`s below; which metrics go where lives here.
 #
 # kind: quotient    value = numerator / denominator x multiplier   (both inputs, same period)
-#       fields: numerator, denominator (metric_ids), multiplier
+#       fields: numerator, denominator, multiplier. Each of numerator / denominator is either
+#         a metric_id, or
+#         {sum: [{metric: <id>, sign: 1 or -1}, ...]}  signed total of 2+ metrics, same period
+#         {average: <id>}   (value at this period end + value one fiscal year earlier) / 2;
+#                           refuses if the earlier year is not in the database
+#       optional: numerator_label / denominator_label, a name for a sum or average (e.g. EBIT),
+#         shown with the computed figure so an answer can quote it.
 # kind: yoy_growth  value = (current - prior_year) / prior_year x multiplier
 #       fields: metric (metric_id), multiplier. prior_year = same period type one fiscal
 #       year earlier (FY26 -> FY25, Q2 FY27 -> Q2 FY26). Refuses a zero or negative base.
@@ -10,9 +16,9 @@
 # Every ratio also has: display_name, formula_version (bump it when the definition
 # changes, so old computed_metric rows stay interpretable), unit, definition.
 
-# Basis of every ratio below: statutory figures as reported, after exceptional items.
-# TCS's own headline margins in its fact sheets exclude exceptional items, so a ratio here can
-# differ from the margin TCS quotes for the same period.
+# Basis: statutory figures as reported. Each definition states whether the ratio is before or
+# after exceptional items (or not affected by them). TCS's own headline margins in its fact
+# sheets exclude exceptional items, so a ratio here can differ from the margin TCS quotes.
 
 ratios:
   net_margin:
@@ -68,3 +74,105 @@ ratios:
       TCS's own headline margins in its fact sheets exclude exceptional items. No adjustment
       for bonus issues or splits (TO VERIFY if comparing years where the share count changed
       for that reason).
+
+  # ---------- D1 additions ----------
+
+  operating_margin:
+    display_name: Operating margin (EBIT margin)
+    kind: quotient
+    numerator:
+      sum:
+        - {metric: profit_before_exceptional_items_and_tax, sign: 1}
+        - {metric: other_income, sign: -1}
+        - {metric: finance_costs, sign: 1}
+    numerator_label: EBIT
+    denominator: revenue_from_operations
+    multiplier: 100
+    unit: PERCENT
+    formula_version: operating_margin.v1
+    definition: >-
+      EBIT divided by revenue from operations, same period, as a percentage, where EBIT =
+      profit before exceptional items and tax - other income + finance costs (operating profit
+      before treasury income and interest). Basis: before exceptional items. This is our own
+      formula: TCS's own headline margins in its fact sheets exclude exceptional items, and its
+      reported operating margin may still be defined differently (TO VERIFY against the fact
+      sheet's definition), so the two can differ.
+
+  effective_tax_rate:
+    display_name: Effective tax rate
+    kind: quotient
+    numerator: tax_expense
+    denominator: profit_before_tax
+    multiplier: 100
+    unit: PERCENT
+    formula_version: effective_tax_rate.v1
+    definition: >-
+      Total tax expense (current plus deferred) divided by profit before tax, same period, as a
+      percentage. Basis: statutory, after exceptional items (profit before tax is after them).
+      Not the statutory tax rate and not cash taxes paid. Note: TCS's own headline margins in
+      its fact sheets exclude exceptional items.
+
+  return_on_equity:
+    display_name: Return on equity
+    kind: quotient
+    numerator: profit_attributable_to_owners
+    denominator: {average: total_equity}
+    denominator_label: Average total equity
+    multiplier: 100
+    unit: PERCENT
+    formula_version: return_on_equity.v1
+    definition: >-
+      Profit attributable to shareholders of the Company divided by the average of total equity
+      at this year end and the previous year end, as a percentage. Basis: statutory, after
+      exceptional items. Total equity includes non-controlling interests while the profit
+      excludes their share (a small mismatch, kept as specified). Needs two year-end balance
+      sheets, so the earliest loaded year cannot be computed. Note: TCS's own headline margins
+      in its fact sheets exclude exceptional items.
+
+  capex_to_revenue:
+    display_name: Capex to revenue
+    kind: quotient
+    numerator:
+      sum:
+        - {metric: purchase_of_ppe, sign: 1}
+        - {metric: purchase_of_intangibles, sign: 1}
+    numerator_label: Capex (cash paid for property, plant and equipment and intangible assets)
+    denominator: revenue_from_operations
+    multiplier: 100
+    unit: PERCENT
+    formula_version: capex_to_revenue.v1
+    definition: >-
+      Cash paid for property, plant and equipment plus cash paid for intangible assets (from
+      the Statement of Cash Flows) divided by revenue from operations, same period, as a
+      percentage. Excludes right-of-use (lease) assets and acquisitions. Basis: cash flow
+      figures, not affected by exceptional items. Note: TCS's own headline margins in its fact
+      sheets exclude exceptional items.
+
+  ocf_to_profit:
+    display_name: Operating cash flow to profit attributable to owners
+    kind: quotient
+    numerator: cash_from_operations
+    denominator: profit_attributable_to_owners
+    multiplier: 100
+    unit: PERCENT
+    formula_version: ocf_to_profit.v1
+    definition: >-
+      Net cash from operating activities divided by profit attributable to shareholders of the
+      Company, same period, as a percentage (100% = profit fully backed by operating cash).
+      Basis: the profit is statutory, after exceptional items; any part of the exceptional
+      items that is a provision not yet paid reduces profit but not operating cash, which
+      raises this ratio. Note: TCS's own headline
+      margins in its fact sheets exclude exceptional items.
+
+  da_to_revenue:
+    display_name: Depreciation and amortisation to revenue
+    kind: quotient
+    numerator: depreciation_amortisation
+    denominator: revenue_from_operations
+    multiplier: 100
+    unit: PERCENT
+    formula_version: da_to_revenue.v1
+    definition: >-
+      Depreciation and amortisation expense divided by revenue from operations, same period, as
+      a percentage. Basis: statutory, not affected by exceptional items. Note: TCS's own
+      headline margins in its fact sheets exclude exceptional items.

@@ -1,5 +1,84 @@
 # PROGRESS
 
+## 2026-10-08 — D1: expanded TCS facts from the FY26 annual report
+
+**Done** (tests first: `tests/test_d1_facts.py`, 52 tests, written before the config, data and code)
+- `config/metrics.yaml`: 20 new metrics with exact definitions (income: other income, finance
+  costs, D&A, profit before exceptional items and tax, three exceptional-item lines, profit before
+  tax, tax expense; balance sheet: total assets, current / non-current investments, other balances
+  with banks, current / non-current lease liabilities, non-controlling interests; other: shares
+  outstanding; cash flow: net cash from operating activities, purchase of PP&E, purchase of
+  intangibles). Optional metric field `sign: outflow_positive`.
+- `data/manual/financials_tcs.csv`: the 12 signed-off rows (unchanged, with sign-off) + 40 new rows
+  (FY26 and FY25), `entered_by = Claude`, verification blank, PDF page + printed page. Statement
+  pages 166, 167, 172, 196; every figure that appears twice was cross-checked (list in the review
+  sheet).
+- `config/ratios.yaml`: operating_margin (EBIT), effective_tax_rate, return_on_equity,
+  capex_to_revenue, ocf_to_profit, da_to_revenue (all `.v1`, PERCENT).
+- Code (small): quotient operands `{sum: [...]}` and `{average: metric}` (`tools/ratios.py`);
+  RatioResult carries numerator/denominator values; the compute_ratio tool lists a sum/average
+  operand (e.g. EBIT) as a tool number so answers can quote it (`agent/tools.py`); SHARES ->
+  SHARES_CRORE unit (`units.py`); cross-foot identities from the company config checked at load
+  (`db/crossfoot.py`, wired into `load_rows`); outflow sign check (`db/validate.py`).
+- `config/companies/tcs.yaml`: bands for the 20 new metrics, `SHARES` printing step,
+  `cross_foot_checks` (PBT = PBEIT - exceptional items; profit for the year = PBT - tax).
+- Build points at the new CSV: README setup step, `scripts/clean_clone_check.sh`, the UI's
+  "build the database" hint, loader docstring. `data/db/sample.sqlite` rebuilt from it with
+  `--raw-dir` hash checks: 52 facts, 40 not verified. (Old DB copy in the session scratchpad.)
+- Updated 3 existing tests that pinned the old lists: `test_metrics_seeded_from_config`,
+  `test_ratios_defined_in_config` (renamed from `test_four_...`), `test_unknown_ratio_raises` (used
+  `operating_margin` as its unknown example), and `test_ratio_definitions_state_the_exceptional_items_basis`
+  (now: each definition states before / after / not affected; the six statutory ones still say
+  "statutory, after exceptional items").
+- Full suite: 718 passed, 2 skipped (opt-in live tests); 54 s, and 4.5 min on a re-run while the local model was loaded.
+- Docs: `docs/D1_facts_for_review.md` (author's checklist), `docs/D1_expanded_facts.md`.
+
+**Router check**
+- Catalog and schema pick up the new metrics and ratios with no prompt change (tested).
+- Live, qwen2.5:3b, router only, 10 new phrasings (not in eval/questions.jsonl): 10 of 10 to the
+  intended tool, metric/ratio and period, incl. "TCS's tax expense in FY26" -> tax_expense (the
+  M7.1 substitution case) and "What were the exceptional items charged in FY26?" -> the three
+  exceptional-item facts. Left out on purpose: an effective-tax-rate phrasing (EV-E07, test split,
+  is on that topic).
+- Live end to end: tax expense FY26 (INR 16,033 crore, verifier ok), operating margin FY25 (24.35%,
+  verifier ok), ROE FY25 refused with "no total_equity fact for FY24".
+
+**Decisions**
+- Exceptional items: no total is printed (4,526 appears nowhere), so the three lines are stored,
+  not a sum. FY25 prints "-": stored as 0.
+- Shares outstanding (exact count, note 8(m)) chosen over share capital (INR 362 crore, rounded).
+- Cash outflows stored positive (`sign: outflow_positive`), as asked ("capex parts are positive
+  outflows").
+- OCF / profit expressed as a percentage (the verifier and UI handle PERCENT; a "times" unit would
+  need new verifier code).
+- ROE denominator = total equity incl. NCI (as specified); numerator excludes NCI. Stated in the
+  definition.
+- Cross-foot checks run on the CSV being loaded, per period/basis/document, and skip when a figure
+  is missing.
+
+**Not done / flags for the author**
+- Dividend per share: not stated as a per-year total in the statements or notes (note 27 gives the
+  parts; only the ten-year summary on PDF 70 prints 110.00 / 126.00). Skipped as instructed.
+- Balance-sheet (assets = equity + liabilities) and cash roll-forward checks still need liability
+  and cash-movement metrics.
+- The new ratios change what the system can answer after the one test-split run (20261007-132850):
+  EV-E07 (test) touches the effective tax rate. Any future test-split number is not comparable to
+  that run. Eval not run.
+- Router prompt grew by 20 metrics and 6 ratios; small-model routing of the OLD dev questions may
+  shift. Not measured (eval not run).
+
+**What to review**: `docs/D1_facts_for_review.md` (the 40 facts, ~20 min), then the decisions above.
+
+**Next**
+- Author verifies the 40 rows, then commit (nothing committed). Next milestone: DCF inputs read
+  from the database (not started).
+
+**How to run**
+```
+PYTHONPATH=src .venv/bin/python -m erp.db.load_facts --csv data/manual/financials_tcs.csv --entry-method llm_extracted --replace
+PYTHONPATH=src:tests .venv/bin/pytest -q tests/test_d1_facts.py
+```
+
 ## 2026-10-07 — M8.1: UI polish (Streamlit)
 
 **Done**

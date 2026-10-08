@@ -6,7 +6,7 @@
 #      commit right now, including uncommitted and new files, excluding everything gitignored)
 #   2. creates a venv and installs requirements.txt
 #   3. runs the test suite (no Ollama, no PDFs, no database: tests that need them skip)
-#   4. builds the sample SQLite database from data/sample/facts_sample.csv (README step)
+#   4. builds the SQLite database from data/manual/financials_tcs.csv (README step)
 #   5. starts the UI in --demo mode headlessly, checks the health endpoint, then stops it
 #
 # It never touches the original checkout. The temp folder is deleted at the end unless --keep.
@@ -80,7 +80,7 @@ grep -E "passed|failed|error" "$WORK/pytest.log" | tail -n 5
 if [ "$rc" != 0 ]; then echo "FAIL: tests (exit $rc); log: $WORK/pytest.log"; KEEP=1; exit 1; fi
 
 step "4. build the sample database"
-PYTHONPATH=src .venv/bin/python -m erp.db.load_facts --csv data/sample/facts_sample.csv \
+PYTHONPATH=src .venv/bin/python -m erp.db.load_facts --csv data/manual/financials_tcs.csv \
   --entry-method llm_extracted --replace
 
 step "5. UI in --demo mode, headless, port $PORT"
