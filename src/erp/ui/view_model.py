@@ -102,10 +102,38 @@ class RatioPath(BaseModel):
 
 class Assumption(BaseModel):
     name: str
-    value: str                        # as written in the assumptions file (rates are decimals)
+    value: str                        # as written in the assumptions file (rates are decimals); database
+                                      # inputs: the value the engine used
     rationale: str
     source: str
     defined_in: str
+    origin: str = "assumptions file"  # or "database: fact:3 (PDF p.166), ... + 2 adjustments in the assumptions file"
+
+
+class DCFInputFact(BaseModel):
+    label: str                        # metric display name and period
+    display: str                      # the fact's value, formatted by code
+    citation: CitationView            # page chip
+
+
+class DCFAdjustmentView(BaseModel):
+    display: str                      # signed, e.g. "INR -609 crore"
+    rationale: str
+    source: str
+
+
+class DCFInput(BaseModel):
+    """One base-year or bridge input: where its value came from (D2)."""
+    name: str                         # assumption key, e.g. cash_and_investments
+    label: str                        # e.g. "Cash and investments"
+    origin: str                       # "database" or "assumptions file"
+    value_display: str                # what the engine used
+    facts: list[DCFInputFact] = []
+    facts_total_display: str | None = None
+    adjustments: list[DCFAdjustmentView] = []   # judgement calls, from the assumptions file
+    treatment: str | None = None      # e.g. leases treated as an operating cost (bridge uses 0)
+    rationale: str
+    source: str
 
 
 class DCFPath(BaseModel):
@@ -120,6 +148,8 @@ class DCFPath(BaseModel):
     valuation_rows: list[tuple[str, str]]
     bridge_rows: list[tuple[str, str]]
     sensitivity: dict | None          # {"columns": [...], "rows": [[wacc, cell, ...], ...]}
+    inputs: list[DCFInput] = []       # base-year revenue and bridge items, with where each came from
+    unverified_fact_ids: list[str] = []
     assumptions: list[Assumption]
     checks: list[tuple[str, str, str]]   # (check_id, status, detail)
     disclaimer: str
@@ -166,6 +196,11 @@ def source_badge(doc_type: str | None, ui_cfg: dict) -> tuple[str, str | None]:
     return OTHER_DOCUMENT, note or f"document type: {doc_type}"
 
 
+def _dcf_facts(detail: dict) -> list[dict]:
+    """Facts a DCF run read from the database (none for runs saved before D2)."""
+    return [f for i in detail.get("db_inputs") or [] for f in i.get("facts", [])]
+
+
 def doc_types(results: list[ToolResult]) -> dict[int, str]:
     """source_id -> doc_type, from the tool output stored in the Answer."""
     found = {}
@@ -180,6 +215,9 @@ def doc_types(results: list[ToolResult]) -> dict[int, str]:
         elif r.tool == "compute_ratio":
             for i in d.get("inputs", []):
                 add_fact(i.get("fact", {}))
+        elif r.tool == "run_dcf":
+            for f in _dcf_facts(d):
+                add_fact(f)
         elif r.tool == "search_documents":
             for h in d.get("results", []):
                 if h.get("source_id") is not None and h.get("doc_type"):
@@ -225,6 +263,9 @@ def reported_values(results: list[ToolResult]) -> dict[str, float]:
         elif r.tool == "compute_ratio":
             for i in d.get("inputs", []):
                 add(i.get("fact", {}))
+        elif r.tool == "run_dcf":
+            for f in _dcf_facts(d):
+                add(f)
     return found
 
 
@@ -284,10 +325,64 @@ def assumptions_status(path) -> str:
 
 
 def _show_value(v) -> str:
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)                    # a database sum like 43998.0 reads as written: 43998
     return ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
 
 
-def dcf_path(r: ToolResult, display: dict, assumptions_file, footer: str) -> DCFPath:
+# Base-year revenue and bridge items, in the order the path shows them.
+DCF_INPUT_LABELS = {"base_year_revenue": "Base-year revenue", "cash_and_investments": "Cash and investments",
+                    "debt": "Debt", "lease_liabilities": "Lease liabilities",
+                    "minority_interest": "Minority interest", "diluted_shares": "Diluted shares"}
+
+
+def dcf_inputs(r: ToolResult, display: dict, ui_cfg: dict) -> list[DCFInput]:
+    d = r.detail
+    money, shares = d["units"]["money"], d["units"].get("shares")
+    records = {i["assumption"]: i for i in d.get("db_inputs") or []}
+    types, reported = doc_types([r]), reported_values([r])
+    chips = {e.evidence_id: citation_view(e, types, {}, ui_cfg, reported) for e in r.evidence if e.kind == "fact"}
+    out = []
+    for name, label in DCF_INPUT_LABELS.items():
+        a = d["assumptions"].get(name)
+        if a is None:
+            continue
+        unit = shares if name == "diluted_shares" else money
+
+        def fmt(x):
+            return format_number(x, unit, display) if unit else _show_value(x)
+        rec = records.get(name)
+        if rec is None:      # typed in the assumptions file (or a run saved before D2)
+            out.append(DCFInput(name=name, label=label, origin="assumptions file", value_display=fmt(a["value"]),
+                                rationale=a["rationale"], source=a["source"]))
+            continue
+        facts = [DCFInputFact(label=f"{f['metric_id']} [{f['period_label']}, {f['basis']}]",
+                              display=format_number(f["value"], f["unit"], display),
+                              citation=chips[f"fact:{f['fact_id']}"])
+                 for f in rec["facts"] if f"fact:{f['fact_id']}" in chips]
+        treatment = None
+        if rec["factor"] == 0:
+            treatment = (f"Leases treated as an operating cost (lease cost stays inside EBIT), so the database "
+                         f"total {fmt(rec['facts_total'])} is not subtracted: the bridge uses {fmt(rec['value'])}.")
+        out.append(DCFInput(
+            name=name, label=label, origin="database", value_display=fmt(rec["value"]), facts=facts,
+            facts_total_display=fmt(rec["facts_total"]),
+            adjustments=[DCFAdjustmentView(display=fmt(x["value"]), rationale=x["rationale"], source=x["source"])
+                         for x in rec["adjustments"]],
+            treatment=treatment, rationale=a["rationale"], source=a["source"]))
+    return out
+
+
+def _origin(name: str, d: dict) -> str:
+    rec = next((i for i in d.get("db_inputs") or [] if i["assumption"] == name), None)
+    if rec is None:
+        return "assumptions file"
+    facts = ", ".join(f"fact:{f['fact_id']} (PDF p.{f['source_page']})" for f in rec["facts"])
+    n = len(rec["adjustments"])
+    return f"database: {facts}" + (f" + {n} adjustment{'s' if n > 1 else ''} in the assumptions file" if n else "")
+
+
+def dcf_path(r: ToolResult, display: dict, assumptions_file, footer: str, ui_cfg: dict | None = None) -> DCFPath:
     d = r.detail
     money, shares, per_share = d["units"]["money"], d["units"].get("shares"), d["per_share_unit"]
     w, v = d["wacc_build"], d["valuation"]
@@ -334,8 +429,10 @@ def dcf_path(r: ToolResult, display: dict, assumptions_file, footer: str) -> DCF
                       else str(b["diluted_shares"])),
                      ("Value per share", format_number(b["value_per_share"], per_share, display))],
         sensitivity=sensitivity,
+        inputs=dcf_inputs(r, display, ui_cfg or load_ui_config()),
+        unverified_fact_ids=d.get("unverified_fact_ids") or [],
         assumptions=[Assumption(name=k, value=_show_value(a["value"]), rationale=a["rationale"], source=a["source"],
-                                defined_in=a["defined_in"]) for k, a in d["assumptions"].items()],
+                                defined_in=a["defined_in"], origin=_origin(k, d)) for k, a in d["assumptions"].items()],
         checks=[(c["check_id"], c["status"], c["detail"]) for c in d["checks"]],
         disclaimer=d["disclaimer"], footer=footer)
 
@@ -396,7 +493,7 @@ def build_view(a: Answer, *, display: dict, ui_cfg: dict, assumptions_file, dcf_
         passages_note=passages_note,
         citations=[by_id[e.evidence_id] for e in a.citations],
         ratio_paths=[ratio_path(r, by_id, display) for r in ok if r.tool == "compute_ratio"],
-        dcf_paths=[dcf_path(r, display, assumptions_file, dcf_footer) for r in ok if r.tool == "run_dcf"],
+        dcf_paths=[dcf_path(r, display, assumptions_file, dcf_footer, ui_cfg) for r in ok if r.tool == "run_dcf"],
         limitations=a.limitations, verification=verification_view(a))
 
 

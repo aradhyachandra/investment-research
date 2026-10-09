@@ -221,6 +221,31 @@ def show_dcf_path(p: DCFPath) -> None:
         show_dcf_tables(p)
 
 
+def show_dcf_inputs(p: DCFPath) -> None:
+    """Base-year revenue and bridge items: database facts (with page chips) vs judgement calls in the YAML."""
+    st.markdown("**Inputs and where they come from** (database facts are cited with their page; "
+                "adjustments and typed values are judgement calls in the assumptions file)")
+    if p.unverified_fact_ids:
+        n = len(p.unverified_fact_ids)
+        st.caption(f":orange[This DCF uses {n} {'fact' if n == 1 else 'facts'} not yet verified by a human: "
+                   f"{', '.join(p.unverified_fact_ids)}]")
+    for i in p.inputs:
+        with st.container(border=True):
+            tag = badge("Filing") if i.origin == "database" else ":gray-badge[Assumptions file]"
+            st.markdown(f"{tag} **{md_escape(i.label)}**: {md_escape(i.value_display)} used in the DCF")
+            for f in i.facts:
+                st.markdown(f"- {md_escape(f.label)} = {md_escape(f.display)}  \n  {citation_line(f.citation)}")
+            if i.facts and (i.adjustments or i.treatment):
+                st.caption(f"Database total: {i.facts_total_display}")
+            for a in i.adjustments:
+                st.markdown(f"- :violet-badge[Judgement adjustment] {md_escape(a.display)}: {md_escape(a.rationale)} "
+                            f"({md_escape(a.source)})")
+            if i.treatment:
+                st.caption(md_escape(i.treatment))
+            if i.origin != "database":
+                st.caption(f"{md_escape(i.rationale)} ({md_escape(i.source)})")
+
+
 def show_dcf_tables(p: DCFPath) -> None:
     st.markdown("**Formulas**\n" + "\n".join(f"- {md_escape(f)}" for f in p.formulas))
     st.markdown("**Discount rate**")
@@ -231,12 +256,14 @@ def show_dcf_tables(p: DCFPath) -> None:
     st.markdown(md_table(["Item", "Value"], p.valuation_rows))
     st.markdown("**Enterprise value to equity value**")
     st.markdown(md_table(["Item", "Value"], p.bridge_rows))
+    if p.inputs:
+        show_dcf_inputs(p)
     if p.sensitivity:
         st.markdown("**Sensitivity: value per share by WACC and terminal growth**")
         st.markdown(md_table(p.sensitivity["columns"], p.sensitivity["rows"]))
     st.markdown("**Key assumptions** (values as written in the assumptions file; rates are decimals)")
-    st.markdown(md_table(["Assumption", "Value", "Rationale", "Source", "Defined in"],
-                         [[a.name, a.value, a.rationale, a.source, a.defined_in] for a in p.assumptions]))
+    st.markdown(md_table(["Assumption", "Value", "From", "Rationale", "Source", "Defined in"],
+                         [[a.name, a.value, a.origin, a.rationale, a.source, a.defined_in] for a in p.assumptions]))
     st.markdown("**Sanity checks**")
     st.markdown(md_table(["Check", "Status", "Detail"], p.checks))
     st.caption(md_escape(p.disclaimer))
@@ -489,9 +516,12 @@ def dcf_tab(db_path: Path, ui_cfg: dict, agent_cfg: dict) -> None:
         st.altair_chart(charts.heatmap_chart(v.heatmap), width="stretch")
         dcf_footer(footer)
 
-    st.markdown(f"**Assumptions** ({md_escape(v.base_name)} scenario; values as written in the assumptions file, rates are decimals)")
-    st.dataframe(pd.DataFrame([{"Assumption": a.name, "Value": a.value, "Rationale": a.rationale, "Source": a.source,
-                                "Defined in": a.defined_in} for a in p.assumptions]),
+    show_dcf_inputs(p)
+
+    st.markdown(f"**Assumptions** ({md_escape(v.base_name)} scenario; values as written in the assumptions file, "
+                "or as read from the database where 'From' says so; rates are decimals)")
+    st.dataframe(pd.DataFrame([{"Assumption": a.name, "Value": a.value, "From": a.origin, "Rationale": a.rationale,
+                                "Source": a.source, "Defined in": a.defined_in} for a in p.assumptions]),
                  hide_index=True, width="stretch",
                  column_config={"Rationale": st.column_config.TextColumn(width="large")})
     names = ui_cfg["dcf"].get("labels", {})

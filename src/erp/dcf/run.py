@@ -7,8 +7,10 @@ Steps: load and validate assumptions (refuses on missing rationale/source) -> bl
 Never takes numbers from an LLM, never uses a market price. The output means "what these
 assumptions imply", not a prediction or a recommendation.
 
-TO VERIFY / TODO: base-year revenue and bridge items come from the YAML (with their sources),
-not from SQLite, because the balance-sheet metrics are not loaded yet. See NOTES.md.
+Inputs the assumptions file marks `from_db` (base-year revenue and bridge items, D2) are read
+from the facts database by dcf/db_inputs.py before anything is computed: their fact ids and pages
+go into the dcf_run row and the result, and a missing fact makes the run refuse. Judgement
+adjustments to those figures stay in the YAML, each with a rationale and source.
 """
 import json
 import sqlite3
@@ -20,6 +22,7 @@ from pydantic import BaseModel
 
 from erp.config import REPO
 from erp.dcf.assumptions import Assumption, AssumptionError, load_scenario
+from erp.dcf.db_inputs import DBInput, resolve_db_inputs, unverified_fact_ids, unverified_note
 from erp.dcf.checks import (
     CheckResult,
     check_required_inputs,
@@ -62,7 +65,10 @@ class DCFResult(BaseModel):
     valuation_date: str
     units: dict[str, str]        # money / shares units of the inputs
     per_share_unit: str          # always INR_PER_SHARE
-    assumptions: dict[str, Assumption]
+    assumptions: dict[str, Assumption]   # database inputs carry their resolved value
+    db_inputs: list[DBInput]             # what was read from the facts database (fact ids, pages)
+    unverified_fact_ids: list[str]       # database inputs no human has checked yet
+    notes: list[str]                     # e.g. "This DCF uses 2 facts not yet verified by a human"
     fcff_build: list[FCFFYear]
     wacc_build: WACCResult
     valuation: ValuationResult
@@ -80,6 +86,19 @@ def _refuse_if_failed(check: CheckResult) -> CheckResult:
     return check
 
 
+def _stored(i: DBInput) -> dict:
+    """A database input as kept in dcf_run.assumptions_json: enough to cite each fact and its page."""
+    return {
+        "assumption": i.assumption, "period": i.period, "basis": i.basis, "unit": i.unit,
+        "facts": [{"fact_id": f.fact_id, "metric_id": f.metric_id, "value": f.value, "unit": f.unit,
+                   "value_in_input_unit": x, "source_id": f.source_id, "source_title": f.source_title,
+                   "source_page": f.source_page, "source_page_label": f.source_page_label, "verified": f.verified}
+                  for f, x in zip(i.facts, i.fact_values)],
+        "facts_total": i.facts_total, "adjustments": [a.model_dump() for a in i.adjustments],
+        "treat_as": i.treat_as, "factor": i.factor, "value": i.value,
+    }
+
+
 def run_dcf(conn: sqlite3.Connection, ticker: str, scenario: str, *, assumptions_path=None,
             dcf_config: Path = DCF_CONFIG) -> DCFResult:
     s = load_scenario(assumptions_path or DEFAULT_ASSUMPTIONS, scenario)
@@ -93,7 +112,12 @@ def run_dcf(conn: sqlite3.Connection, ticker: str, scenario: str, *, assumptions
         cfg = yaml.safe_load(f)
 
     checks = [_refuse_if_failed(check_required_inputs(s))]
-    v = s.value
+    assumptions, db_inputs = resolve_db_inputs(conn, ticker, s)   # refuses if a fact is missing
+    unverified = unverified_fact_ids(db_inputs)
+    notes = unverified_note(unverified)
+
+    def v(name):
+        return assumptions[name].value
 
     w = compute_wacc(v("risk_free_rate"), v("beta"), v("equity_risk_premium"), v("debt_weight"),
                      v("cost_of_debt_pre_tax"), v("debt_tax_rate"))
@@ -123,7 +147,10 @@ def run_dcf(conn: sqlite3.Connection, ticker: str, scenario: str, *, assumptions
     run_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     assumptions_json = json.dumps({
         "file": s.file, "sha256": s.sha256, "scenario": scenario, "label": s.label, "units": s.units,
-        "resolved": {k: a.model_dump() for k, a in s.assumptions.items()},
+        "resolved": {k: a.model_dump(exclude_defaults=True) for k, a in assumptions.items()},   # typed: as before D2
+        "facts_basis": s.facts_basis,
+        "db_inputs": [_stored(i) for i in db_inputs],
+        "unverified_fact_ids": unverified,
         "yaml_text": s.yaml_text,
     })
     outputs_json = json.dumps({
@@ -144,7 +171,7 @@ def run_dcf(conn: sqlite3.Connection, ticker: str, scenario: str, *, assumptions
     return DCFResult(
         run_id=cur.lastrowid, ticker=ticker, scenario=scenario, description=s.description, label=s.label,
         valuation_date=valuation_date, units=s.units, per_share_unit="INR_PER_SHARE",
-        assumptions=s.assumptions, fcff_build=years, wacc_build=w, valuation=valuation, sensitivity=grid,
+        assumptions=assumptions, db_inputs=db_inputs, unverified_fact_ids=unverified, notes=notes, fcff_build=years, wacc_build=w, valuation=valuation, sensitivity=grid,
         checks=checks, all_checks_passed=all(c.status == "pass" for c in checks), code_version=version,
         run_at=run_at, disclaimer=DISCLAIMER,
     )

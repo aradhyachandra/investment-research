@@ -86,7 +86,8 @@ EV is the value of the *operations*. To get what belongs to shareholders:
 
 ## 5. The assumptions file
 
-Every assumption is written as a block with **value, rationale and source**. If any rationale
+Every assumption is written as a block with **value, rationale and source**. (Since D2, base-year
+revenue and the bridge items can instead point at the facts database; see section 8.) If any rationale
 or source is missing or blank, anywhere in the file, the engine refuses to run and names the
 assumption. Rates are decimals (0.12, not 12). A `shared` block holds common assumptions;
 `base`, `bear`, `bull` blocks override only what differs. The commented example is
@@ -103,4 +104,35 @@ stored. No market price is used anywhere, and nothing is called "cheap" or "expe
 
 - The **golden test** (Python within 0.1% of your hand spreadsheet) waits for P0.3.
 - Checks that compare assumptions with history (margins, growth jumps) need more metrics in
-  SQLite. Base revenue and bridge items are typed into the YAML for now. See NOTES.md.
+  SQLite. See NOTES.md.
+
+## 8. What now comes from where (D2, 2026-10-08)
+
+The real file (`data/manual/dcf_inputs.yaml`) no longer types the starting figures. They are read
+from the facts database: consolidated, for the fiscal year that ends on the valuation date (FY26).
+
+| Input | From the database | Judgement in the YAML |
+|---|---|---|
+| Base-year revenue | revenue from operations | none |
+| Cash and investments | cash + other bank balances + current investments + non-current investments | minus earmarked balances 609 and TCS Foundation deposits 2,289 (note, PDF p.185) |
+| Lease liabilities | current + non-current lease liabilities | `treat_as: operating_cost`, so the bridge uses 0 |
+| Minority interest | non-controlling interests | plus Class B CCPS of a subsidiary 126 (PDF p.166) |
+| Diluted shares | shares outstanding (crore shares) | none |
+| Debt | (no borrowings metric yet) | typed: 0 |
+
+Everything else (growth, margins, tax, D&A, capex, working capital, WACC inputs, terminal growth)
+is still a typed judgement in the YAML, as before.
+
+Each database input is written like this:
+
+    cash_and_investments:
+      from_db: [cash_and_equivalents, other_balances_with_banks, current_investments, non_current_investments]
+      rationale: "..."
+      source: "..."
+      adjustments:
+        - {value: -609, rationale: "...", source: "AR FY26 ... PDF p.185"}
+
+The engine adds the facts, then the adjustments. Each fact used is stored in the `dcf_run` row with
+its fact id and page, and the answer cites it. If a fact is missing, the run refuses and names it;
+there is no typed number to fall back on. If a fact has not been checked by a human, the run still
+works but says "This DCF uses N facts not yet verified by a human".

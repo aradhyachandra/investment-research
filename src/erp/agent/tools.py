@@ -241,11 +241,17 @@ def _dcf_tool(a: DCFArgs, env: ToolEnv) -> ToolResult:
     dcf_id = f"dcf:{d.run_id}"
     money = d.units["money"]
     period = d.valuation_date
+    # Base-year revenue and bridge items read from the facts database (D2): each fact is cited
+    # with its page, and the DCF run lists them as its inputs (so citing the run cites them too).
+    fact_evs = list({e.evidence_id: e for e in (_fact_evidence(f) for i in d.db_inputs for f in i.facts)}.values())
     ev = Evidence(
         evidence_id=dcf_id, kind="dcf_run",
         source_title=f"DCF run {d.run_id}, scenario '{d.scenario}' ({d.label}); assumptions file "
                      f"{Path(env.dcf_assumptions).name}",
-        period=period, note="Valuation date shown as period. Basis as stated in the assumptions file.")
+        period=period, input_evidence_ids=[e.evidence_id for e in fact_evs],
+        note="Valuation date shown as period. Basis as stated in the assumptions file."
+             + (f" Inputs read from the facts database: {', '.join(i.assumption for i in d.db_inputs)}."
+                if d.db_inputs else ""))
 
     def n(field, label, value, unit, quantity=None, variant=False, conditions=None):
         num = _number(dcf_id, field, label, value, unit, period, None, env.display,
@@ -261,6 +267,21 @@ def _dcf_tool(a: DCFArgs, env: ToolEnv) -> ToolResult:
         n("wacc", "WACC", v.wacc * 100, "PERCENT"),
         n("terminal_growth", "Terminal growth rate", v.terminal_growth * 100, "PERCENT"),
     ]
+    names = _metric_names(env.conn)
+    for i in d.db_inputs:
+        unit = d.units["shares"] if i.assumption == "diluted_shares" else money
+        words = i.assumption.replace("_", " ")
+        how = " (0: leases treated as an operating cost)" if i.factor == 0 else ""
+        numbers.append(n(f"input_{i.assumption}", f"{words.capitalize()} used in the DCF{how}; from the facts "
+                         f"database{' plus assumptions-file adjustments' if i.adjustments else ''}", i.value, unit,
+                         quantity=i.assumption))
+        for k, adj in enumerate(i.adjustments, 1):
+            numbers.append(n(f"input_{i.assumption}_adjustment_{k}", f"Adjustment to {words} from the assumptions "
+                             f"file: {adj.rationale}", adj.value, unit, quantity=f"{i.assumption}.adjustment"))
+        for f in i.facts:
+            numbers.append(_number(f"fact:{f.fact_id}", "value", f"{names.get(f.metric_id, f.metric_id)}, "
+                                   f"{f.period_label} ({f.basis}; DCF input '{i.assumption}')", f.value, f.unit,
+                                   f.period_label, f.basis, env.display, quantity=f.metric_id))
     if v.tv_share_of_ev is not None:
         numbers.append(n("tv_share_of_ev", "Terminal value as share of enterprise value", v.tv_share_of_ev * 100,
                          "PERCENT"))
@@ -277,9 +298,10 @@ def _dcf_tool(a: DCFArgs, env: ToolEnv) -> ToolResult:
                     numbers.append(n(f"sensitivity_{i}_{j}", f"Value per share at WACC {w * 100:.2f}% and "
                                      f"terminal growth {gr * 100:.2f}%", g.value_per_share[i][j], d.per_share_unit,
                                      "value_per_share", True, {"wacc": w * 100, "terminal_growth": gr * 100}))
-    notes = [d.disclaimer, f"Scenario label: {d.label}."]
+    notes = [d.disclaimer, f"Scenario label: {d.label}.", *d.notes]
     notes += [f"Check {c.check_id}: {c.status} ({c.detail})" for c in d.checks if c.status != "pass"]
-    return ToolResult(tool="run_dcf", args=a.model_dump(), ok=True, numbers=numbers, evidence=[ev], notes=notes,
+    return ToolResult(tool="run_dcf", args=a.model_dump(), ok=True, numbers=numbers, evidence=[ev, *fact_evs],
+                      notes=notes,
                       detail=d.model_dump(mode="json"))
 
 

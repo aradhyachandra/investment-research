@@ -2,6 +2,34 @@
 
 Open questions, TO VERIFY items, and validation TODOs. Newest first.
 
+## D2 DCF inputs from the database (2026-10-08)
+
+- Base-year revenue, cash and investments, lease liabilities, minority interest and diluted shares
+  are now read from the facts database (consolidated, the fiscal year ending on the valuation date).
+  `debt` is still typed in the YAML (0): there is no borrowings metric in the database yet.
+- **Share count rounding.** The old YAML typed 361.80875 crore; the database holds 3,618,087,518
+  shares = 361.8087518 crore. Value per share moves by about 5e-9 relative (base
+  1914.8185251855948 -> 1914.8185156593645, bear 1445.1121760470942 -> 1445.112168857655, bull
+  2351.66131697048 -> 2351.6613052709554); identical at two decimals. Equity values are identical to
+  the bit. The pinned test allows rel 1e-8 for per share and is exact for equity.
+- TO VERIFY (author / finance partner): `shares_outstanding` is the year-end count, used as the
+  diluted count. Fine for FY26 (equal to the EPS weighted average; no dilutive securities reported),
+  but not automatically true for other years.
+- TO VERIFY: the two cash adjustments (earmarked balances 609, TCS Foundation deposits 2,289, note on
+  PDF p.185) and the Class B CCPS adjustment (126, PDF p.166) are figures typed in the YAML, not
+  database facts. Their wording in the rationales was rewritten by Claude from the old single-line
+  rationale; check it says what the report says.
+- The valuation date must be a fiscal year end when any input is read from the database (no stub
+  periods); otherwise run_dcf refuses.
+- A typed `value` is still allowed for these inputs (the toy test fixture uses it). A test pins that
+  the real file uses `from_db` for all five and that no scenario overrides them with a typed number.
+- Unverified database inputs do not block the run; the result, the tool notes and the Answer's
+  limitations say "This DCF uses N facts not yet verified by a human: fact:..". Not a check, so
+  `all_checks_passed` is unaffected.
+- The DCF tool now returns the input facts as evidence and numbers (and as `input_evidence_ids` of
+  the DCF run), so DCF answers cite up to 9 more fact pages. Eval DCF questions' citation scores
+  and the composer prompt (more numbers listed) may shift. Eval not run.
+
 ## D1 expanded facts (2026-10-08)
 
 - TO VERIFY (author): all 40 new rows in `data/manual/financials_tcs.csv` (checklist:
@@ -356,7 +384,8 @@ built: the two-step router (v1) is the default, as the plan expects on 8 GB.
   date part-way through a year is not handled.
 - **Leases**: `lease_liabilities` is subtracted in the bridge. If leases are instead treated as
   operating costs inside EBIT, set it to 0 and say so in the rationale. Decide with the finance
-  partner (plan 5.1: consistency between EBIT and the bridge).
+  partner (plan 5.1: consistency between EBIT and the bridge). Since D2: `treat_as:
+  operating_cost` (bridge uses 0, database total still recorded) or `treat_as: debt` (subtracted).
 - **Terminal growth >= risk-free rate**: stored as a failed check but the run still completes.
   Plan says "must be below"; confirm whether it should refuse.
 - **TV share warning band** 50%-85% (`config/dcf.yaml`) is a placeholder, not sourced.
@@ -375,9 +404,11 @@ TODO (need historical facts in SQLite; today only 5 metrics are loaded):
 - [ ] Historical growth, margins, tax rate, D&A %, capex %, NWC changes shown beside assumptions
 - [ ] Margin / growth jumps vs history flagged
 - [ ] Historical FCFF
-- [ ] Bridge items (cash, investments, debt, leases, minorities) and base-year revenue taken
-      from the latest balance-sheet / P&L facts, with fact_ids, instead of the YAML
-- [ ] All required facts present and from the same basis and period
+- [x] Bridge items (cash, investments, leases, minorities, shares) and base-year revenue taken
+      from the balance-sheet / P&L facts, with fact_ids, instead of the YAML (D2). Debt still typed
+      (no borrowings metric yet).
+- [x] All required facts present and from the same basis and period (D2: one period and basis by
+      construction; a missing fact refuses the run)
 - [ ] Implied multiples (implied EV/EBITDA, implied P/E)
 - [ ] Golden test vs the hand spreadsheet (base within 0.1% + 2 more scenarios) after P0.3
 

@@ -409,10 +409,25 @@ def _demo_page(results: str, db: str):
     _main(["--demo", results, "--db", db])
 
 
+def _with_dcf_input_facts(conn, ctx):
+    """The page's DCF tab runs the real assumptions file, which reads its base-year revenue and bridge
+    items from the database (D2). Add those FY26 facts from the manual CSV where the frozen fixture
+    has none (the fixture's own rows, e.g. unverified revenue and cash, stay as they are)."""
+    from erp.db.load_facts import load_rows
+    from test_d1_facts import manual_rows
+    have = set(conn.execute("SELECT metric_id, label FROM fact JOIN period USING (period_id)").fetchall())
+    needed = {m for a in yaml.safe_load((REPO / "data" / "manual" / "dcf_inputs.yaml").read_text())["shared"].values()
+              for m in (a.get("from_db") or [])}
+    rows = [r for r in manual_rows() if r["metric_id"] in needed and r["period"] == "FY26"
+            and (r["metric_id"], r["period"]) not in have]
+    load_rows(conn, rows, ctx, entry_method="llm_extracted")
+    return conn
+
+
 @pytest.fixture
-def demo_page(tmp_path, env, fact_answer, ratio_answer, dcf_answer):
+def demo_page(tmp_path, env, ctx, fact_answer, ratio_answer, dcf_answer):
     _write_run(tmp_path / "20260102-000000_bbbb", [fact_answer, ratio_answer, dcf_answer])
-    db = _db_file(env.conn, tmp_path / "db.sqlite")
+    db = _db_file(_with_dcf_input_facts(env.conn, ctx), tmp_path / "db.sqlite")
     at = AppTest.from_function(_demo_page, args=(str(tmp_path), str(db)), default_timeout=60)
     at.run()
     assert not at.exception, at.exception
@@ -449,6 +464,18 @@ def test_page_dcf_tab_has_status_footer_and_charts(demo_page):
     footer_captions = [c for c in dcf.caption if FOOTER in c.value.replace("\\", "")]
     assert len(footer_captions) >= 3                          # next to each chart of DCF figures
     assert "Assumptions" in "\n".join(m.value for m in dcf.markdown)
+
+
+def test_page_dcf_tab_shows_where_inputs_come_from(demo_page):
+    """D2: database inputs with page chips, YAML adjustments marked as judgement, unverified facts named."""
+    dcf = demo_page.tabs[2]
+    text = "\n".join(m.value for m in dcf.markdown)
+    assert "Inputs and where they come from" in text
+    assert "PDF p.166" in text and "PDF p.167" in text and "PDF p.196" in text
+    assert text.count("Judgement adjustment") >= 3          # -609, -2,289 (cash), +126 (minority)
+    assert "Assumptions file" in text                        # debt is still typed in the YAML
+    # The frozen fixture's FY26 revenue and cash rows are unverified.
+    assert any("not yet verified by a human" in c.value for c in dcf.caption)
 
 
 def test_page_has_no_advice_or_price_wording_on_any_tab(demo_page):

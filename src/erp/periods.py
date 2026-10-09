@@ -107,3 +107,17 @@ def prior_year_label(label: str, fiscal_year_end_month: int) -> str:
     if p.fiscal_year - 1 < 2000:
         raise PeriodError(f"the year before {label!r} cannot be written as a two-digit 20xx label")
     return _make_label(p.period_type, p.fiscal_year - 1)
+
+
+def fiscal_year_ending_on(day: date, fiscal_year_end_month: int) -> str:
+    """The label of the fiscal year that ends exactly on `day` ('FY26' for 2026-03-31, March year end).
+
+    Raises PeriodError if `day` is not a fiscal year end (used by the DCF: no stub periods).
+    """
+    _check_end_month(fiscal_year_end_month)
+    fiscal_year = day.year + (1 if day.month > fiscal_year_end_month else 0)
+    p = _build("FY", fiscal_year, fiscal_year_end_month)
+    if p.end_date != day:
+        raise PeriodError(f"{day} is not a fiscal year end (fiscal year ends in month {fiscal_year_end_month}; "
+                          f"the nearest is {p.end_date})")
+    return p.label

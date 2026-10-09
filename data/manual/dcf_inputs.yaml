@@ -3,11 +3,16 @@
 # Any README or write-up must say these assumptions were AI-drafted.
 # Illustrative: what these assumptions imply. Not a prediction. Not investment advice.
 # Money in INR crore, consolidated Ind AS, FY26 (year ended 31 Mar 2026). AR = TCS Integrated Annual Report 2025-26 (PDF page numbers).
+# D2 (2026-10-08, at the author's request): base-year revenue and the bridge items are read from the facts
+# database (`from_db`: metric ids, summed, for the fiscal year ending on the valuation date, in `facts_basis`).
+# Judgement calls on top of a database figure are `adjustments` (signed, each with value, rationale, source).
+# If a listed fact is missing, run_dcf refuses; it never falls back to a typed number.
 ticker: TCS
 label: "TCS working assumptions (AI-drafted, author-adopted, no finance-partner review)"
 units:
   money: INR_CRORE
   shares: SHARES_CRORE
+facts_basis: consolidated
 shared:
   valuation_date:
     value: "2026-03-31"
@@ -18,9 +23,9 @@ shared:
     rationale: "Five explicit years, then terminal value. TO VERIFY with finance partner."
     source: "Author judgement (draft)"
   base_year_revenue:
-    value: 267021
-    rationale: "FY26 consolidated revenue from operations."
-    source: "AR FY26 statement of profit and loss, PDF p.167"
+    from_db: [revenue_from_operations]
+    rationale: "FY26 consolidated revenue from operations (267,021 when this file was converted to database inputs)."
+    source: "Facts database: revenue_from_operations, FY26 consolidated (AR FY26 statement of profit and loss, PDF p.167)"
   revenue_growth:
     value: [0.06, 0.07, 0.07, 0.065, 0.06]
     rationale: "FY26 grew 4.6% (267,021 vs 255,324). Base assumes modest recovery then fade to ~6%. Judgement, not a forecast."
@@ -74,25 +79,37 @@ shared:
     rationale: "Below WACC and below the 5.34% risk-free rate; roughly long-run nominal growth for a mature IT services firm. TO VERIFY."
     source: "Author judgement (draft)"
   cash_and_investments:
-    value: 43998
-    rationale: "Cash 6,417 + other bank balances 6,491 + current investments 33,770 + non-current investments 218 = 46,896, less earmarked balances 609 and TCS Foundation deposits 2,289 that are not free cash. Other income is excluded from FCFF so this treasury is added once, here."
-    source: "AR FY26 balance sheet PDF p.166; other bank balances note PDF p.185"
+    from_db: [cash_and_equivalents, other_balances_with_banks, current_investments, non_current_investments]
+    rationale: "Cash + other bank balances + current investments + non-current investments (46,896 at FY26), less the adjustments below for balances that are not free cash. Other income is excluded from FCFF so this treasury is added once, here."
+    source: "Facts database: the four balance-sheet lines, FY26 consolidated (AR FY26 balance sheet PDF p.166)"
+    adjustments:
+      - value: -609
+        rationale: "Earmarked balances with banks (the note: margin money for purchase of investments, unclaimed dividends and a regulatory liquidity backstop): not free cash."
+        source: "AR FY26 other bank balances note PDF p.185"
+      - value: -2289
+        rationale: "Short-term deposits pertaining to TCS Foundation, held for specified purposes (the note's wording): not free cash for shareholders."
+        source: "AR FY26 other bank balances note PDF p.185"
   debt:
     value: 0
     rationale: "No borrowings reported."
     source: "AR FY26 balance sheet PDF p.166"
   lease_liabilities:
-    value: 0
-    rationale: "Leases treated as an operating cost (ROU depreciation and lease interest stay in EBIT, no add-back), so lease liabilities of 11,283 are NOT also subtracted. Consistency rule from the plan."
-    source: "AR FY26 lease note PDF p.200 (liability 11,283 = 1,830 + 9,453)"
+    from_db: [lease_liabilities_current, lease_liabilities_non_current]
+    treat_as: operating_cost
+    rationale: "Leases treated as an operating cost (ROU depreciation and lease interest stay in EBIT, no add-back), so the lease liabilities (11,283 = 1,830 + 9,453 at FY26) are NOT also subtracted: the bridge uses 0. Consistency rule from the plan."
+    source: "Facts database: current and non-current lease liabilities, FY26 consolidated (AR FY26 balance sheet PDF p.166; lease note PDF p.200)"
   minority_interest:
-    value: 1364
-    rationale: "Non-controlling interests 1,238 plus Class B CCPS of a subsidiary 126, at book value."
-    source: "AR FY26 balance sheet PDF p.166"
+    from_db: [non_controlling_interests]
+    rationale: "Non-controlling interests (1,238 at FY26) plus the adjustment below, at book value."
+    source: "Facts database: non_controlling_interests, FY26 consolidated (AR FY26 balance sheet PDF p.166)"
+    adjustments:
+      - value: 126
+        rationale: "Class B compulsorily convertible preference shares issued by a subsidiary (HyperVault AI Data Center Limited): a claim of other holders on that subsidiary, treated like a minority interest, at book value."
+        source: "AR FY26 balance sheet PDF p.166"
   diluted_shares:
-    value: 361.80875
-    rationale: "Weighted average 361,80,87,518 shares = 361.80875 crore; no dilutive securities reported."
-    source: "AR FY26 EPS note PDF p.224"
+    from_db: [shares_outstanding]
+    rationale: "Shares outstanding at 31 Mar 2026: 361,80,87,518 = 361.8087518 crore. Equal to the weighted average used for EPS (no change in the year) and no dilutive securities reported, so used as the diluted count."
+    source: "Facts database: shares_outstanding, FY26 (AR FY26 share capital note 8(m), PDF p.196); EPS note PDF p.224"
 scenarios:
   base:
     description: "Base: shared assumptions as drafted."

@@ -7,8 +7,19 @@ simply absent: that is reported by the 'required_inputs_present' check (checks.p
 run_dcf treats as blocking.
 
 File shape (see tests/fixtures/dcf_toy_assumptions.yaml for a commented example):
-    ticker, label, units: {money, shares}, shared: {<assumptions>}, scenarios: {<name>: {...}}
+    ticker, label, units: {money, shares}, facts_basis, shared: {<assumptions>}, scenarios: {<name>: {...}}
 A scenario's own assumptions override `shared` ones of the same name.
+
+An assumption is written in one of two ways (D2):
+  - typed:    {value, rationale, source}
+  - database: {from_db: [metric_id, ...], rationale, source, adjustments: [{value, rationale, source}],
+               treat_as}  (base-year revenue and bridge items only, see DB_INPUT_KINDS)
+    The value is the sum of those facts for the fiscal year ending on the valuation date, in the
+    file's `facts_basis` (fetched by dcf/db_inputs.py at run time), plus the adjustments. Each
+    adjustment is a judgement call with its own value, rationale and source (signed: -609 subtracts).
+    lease_liabilities must say `treat_as`: 'debt' (subtracted in the bridge) or 'operating_cost'
+    (lease cost stays inside EBIT, so the bridge uses 0). The loader leaves `value` empty for these;
+    run_dcf fills it in, and refuses if a fact is missing. It never falls back to a typed number.
 """
 import datetime
 import hashlib
@@ -54,15 +65,37 @@ REQUIRED_ASSUMPTIONS = {
     "diluted_shares": "positive",
 }
 ENTRY_KEYS = {"value", "rationale", "source"}
-TOP_LEVEL_KEYS = {"ticker", "label", "units", "shared", "scenarios"}
+# Assumptions that may be read from the facts database, and which units table their facts use.
+DB_INPUT_KINDS = {
+    "base_year_revenue": "money",
+    "cash_and_investments": "money",
+    "debt": "money",
+    "lease_liabilities": "money",
+    "minority_interest": "money",
+    "diluted_shares": "shares",
+}
+DB_ENTRY_KEYS = {"from_db", "rationale", "source", "adjustments", "treat_as"}
+ADJUSTMENT_KEYS = {"value", "rationale", "source"}
+LEASE_TREATMENTS = ("operating_cost", "debt")
+TOP_LEVEL_KEYS = {"ticker", "label", "units", "facts_basis", "shared", "scenarios"}
 SCENARIO_META_KEYS = {"description"}
 
 
+class Adjustment(BaseModel):
+    """A judgement adjustment to a database figure, in the file's units (signed)."""
+    value: float
+    rationale: str
+    source: str
+
+
 class Assumption(BaseModel):
-    value: Any
+    value: Any                   # None for a database input until run_dcf resolves it
     rationale: str
     source: str
     defined_in: str              # 'shared' or 'scenario:<name>'
+    from_db: list[str] | None = None      # metric_ids summed from the facts database
+    adjustments: list[Adjustment] = []
+    treat_as: str | None = None           # lease_liabilities only: 'debt' or 'operating_cost'
 
 
 class Scenario(BaseModel):
@@ -71,6 +104,7 @@ class Scenario(BaseModel):
     scenario: str
     description: str
     units: dict[str, str]
+    facts_basis: str | None              # basis of database inputs (e.g. 'consolidated')
     assumptions: dict[str, Assumption]   # only the ones present; see checks.check_required_inputs
     file: str
     sha256: str
@@ -89,6 +123,55 @@ def _where(block: str) -> str:
     return "shared" if block == "shared" else f"scenario {block.split(':', 1)[1]!r}"
 
 
+def _check_text(label: str, entry: dict, where: str) -> None:
+    for field in ("rationale", "source"):
+        text = entry.get(field)
+        if not isinstance(text, str) or not text.strip():
+            raise AssumptionError(f"{label} ({where}) has a missing or empty {field}. "
+                                  f"Every assumption needs a value, rationale and source. Refusing to run.")
+
+
+def _check_db_entry(name: str, entry: dict, where: str) -> None:
+    if "value" in entry:
+        raise AssumptionError(f"assumption {name!r} ({where}) has both 'value' and 'from_db'; "
+                              "a database input must not also carry a typed number")
+    if name not in DB_INPUT_KINDS:
+        raise AssumptionError(f"assumption {name!r} ({where}) cannot use from_db; only "
+                              f"{sorted(DB_INPUT_KINDS)} can be read from the database")
+    extra = set(entry) - DB_ENTRY_KEYS
+    if extra:
+        raise AssumptionError(f"assumption {name!r} ({where}) has unexpected keys {sorted(extra)}; "
+                              f"allowed: {sorted(DB_ENTRY_KEYS)}")
+    metrics = entry["from_db"]
+    if not isinstance(metrics, list) or not metrics or not all(isinstance(m, str) and m.strip() for m in metrics):
+        raise AssumptionError(f"assumption {name!r} ({where}): from_db must be a non-empty list of metric ids, "
+                              f"got {metrics!r}")
+    if len(set(metrics)) != len(metrics):
+        raise AssumptionError(f"assumption {name!r} ({where}): a metric is listed twice in from_db {metrics}")
+    _check_text(f"assumption {name!r}", entry, where)
+    adjustments = entry.get("adjustments", [])
+    if not isinstance(adjustments, list):
+        raise AssumptionError(f"assumption {name!r} ({where}): adjustments must be a list of "
+                              "{value, rationale, source} blocks")
+    for n, adj in enumerate(adjustments, 1):
+        label = f"adjustment {n} of {name!r}"
+        if not isinstance(adj, dict):
+            raise AssumptionError(f"{label} ({where}) must be a block with value, rationale and source")
+        extra = set(adj) - ADJUSTMENT_KEYS
+        if extra:
+            raise AssumptionError(f"{label} ({where}) has unexpected keys {sorted(extra)}; "
+                                  "allowed: value, rationale, source")
+        if not _is_number(adj.get("value")):
+            raise AssumptionError(f"{label} ({where}) must have a number as its value, got {adj.get('value')!r}")
+        _check_text(label, adj, where)
+    if name == "lease_liabilities":
+        if entry.get("treat_as") not in LEASE_TREATMENTS:
+            raise AssumptionError(f"assumption 'lease_liabilities' ({where}) read from the database must say "
+                                  f"treat_as: one of {LEASE_TREATMENTS}; got {entry.get('treat_as')!r}")
+    elif "treat_as" in entry:
+        raise AssumptionError(f"assumption {name!r} ({where}): treat_as is only for lease_liabilities")
+
+
 def _check_entry(name: str, entry, block: str) -> None:
     where = _where(block)
     if name not in REQUIRED_ASSUMPTIONS:
@@ -96,17 +179,16 @@ def _check_entry(name: str, entry, block: str) -> None:
     if not isinstance(entry, dict):
         raise AssumptionError(f"assumption {name!r} ({where}) must be a block with value, rationale and source; "
                               f"got {entry!r}. Refusing to run.")
+    if "from_db" in entry:
+        _check_db_entry(name, entry, where)
+        return
     extra = set(entry) - ENTRY_KEYS
     if extra:
         raise AssumptionError(f"assumption {name!r} ({where}) has unexpected keys {sorted(extra)}; "
                               f"allowed: value, rationale, source")
     if "value" not in entry or entry["value"] is None:
         raise AssumptionError(f"assumption {name!r} ({where}) has no value. Refusing to run.")
-    for field in ("rationale", "source"):
-        text = entry.get(field)
-        if not isinstance(text, str) or not text.strip():
-            raise AssumptionError(f"assumption {name!r} ({where}) has a missing or empty {field}. "
-                                  f"Every assumption needs a value, rationale and source. Refusing to run.")
+    _check_text(f"assumption {name!r}", entry, where)
 
 
 def _is_number(v) -> bool:
@@ -190,6 +272,13 @@ def _resolve(data: dict, name: str) -> dict[str, Assumption]:
         horizon = _normalise_value("forecast_horizon_years", entry["value"], None, _where(source_block))
     out = {}
     for key, (entry, source_block) in merged.items():
+        if "from_db" in entry:     # value filled in by run_dcf from the database (dcf/db_inputs.py)
+            out[key] = Assumption(
+                value=None, rationale=entry["rationale"].strip(), source=entry["source"].strip(),
+                defined_in=source_block, from_db=list(entry["from_db"]), treat_as=entry.get("treat_as"),
+                adjustments=[Adjustment(value=a["value"], rationale=a["rationale"].strip(), source=a["source"].strip())
+                             for a in entry.get("adjustments", [])])
+            continue
         out[key] = Assumption(value=_normalise_value(key, entry["value"], horizon, _where(source_block)),
                               rationale=entry["rationale"].strip(), source=entry["source"].strip(),
                               defined_in=source_block)
@@ -214,6 +303,11 @@ def load_scenario(path, scenario: str) -> Scenario:
         raise AssumptionError(f"share unit {units.get('shares')!r} not supported; use one of {list(SHARE_UNITS)}")
 
     resolved = {name: _resolve(data, name) for name in data["scenarios"]}
+    uses_db = any(a.from_db for r in resolved.values() for a in r.values())
+    facts_basis = data.get("facts_basis")
+    if uses_db and (not isinstance(facts_basis, str) or not facts_basis.strip()):
+        raise AssumptionError(f"{path}: some assumptions are read from the database (from_db), so the file needs "
+                              "facts_basis (e.g. consolidated)")
     if scenario not in resolved:
         raise AssumptionError(f"unknown scenario {scenario!r}; defined scenarios: {list(resolved)}")
 
@@ -224,6 +318,7 @@ def load_scenario(path, scenario: str) -> Scenario:
     return Scenario(
         ticker=str(data["ticker"]), label=str(data.get("label") or ""), scenario=scenario,
         description=str((data["scenarios"][scenario] or {}).get("description") or ""),
-        units={"money": units["money"], "shares": units["shares"]}, assumptions=resolved[scenario],
+        units={"money": units["money"], "shares": units["shares"]},
+        facts_basis=facts_basis.strip() if isinstance(facts_basis, str) else None, assumptions=resolved[scenario],
         file=shown, sha256=hashlib.sha256(text.encode()).hexdigest(), yaml_text=text,
     )

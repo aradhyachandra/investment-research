@@ -1,5 +1,64 @@
 # PROGRESS
 
+## 2026-10-08 — D2: DCF base-year and bridge inputs from the facts database
+
+**Done** (tests first: `tests/test_dcf_db_inputs.py`, 42 tests; the 3 pinning tests were written and
+passed against the old typed YAML before any code changed)
+- `data/manual/dcf_inputs.yaml` (author asked for this edit): `facts_basis: consolidated`; the five
+  inputs now use `from_db` (base_year_revenue, cash_and_investments, lease_liabilities with
+  `treat_as: operating_cost`, minority_interest, diluted_shares). Judgement figures moved into
+  `adjustments` (cash -609 and -2,289, note PDF p.185; minority +126, PDF p.166), each with value,
+  rationale, source. Rates, growth and all other assumptions untouched. Debt still typed (0).
+- `src/erp/dcf/assumptions.py`: second entry form `{from_db, rationale, source, adjustments,
+  treat_as}`; refuses a missing/blank rationale or source on the entry or on any adjustment,
+  value + from_db together, from_db on non-bridge inputs, a duplicate metric, treat_as missing on
+  leases or present elsewhere, a missing `facts_basis`.
+- `src/erp/dcf/db_inputs.py` (new): fetches each metric with `get_financial_fact` for the fiscal
+  year ending on the valuation date; converts units (MONEY_UNITS / SHARE_UNITS); value = facts +
+  adjustments, x 0 for leases treated as an operating cost; refuses (DCFInputError) naming metric,
+  period and basis if a fact is missing/unknown, or if the valuation date is not a fiscal year end.
+- `src/erp/dcf/run.py`: resolves database inputs before any arithmetic; `DCFResult.db_inputs`,
+  `unverified_fact_ids`, `notes`; `dcf_run.assumptions_json` gains `facts_basis`, `db_inputs`
+  (fact ids, values, pages, adjustments) and `unverified_fact_ids`. Engine arithmetic unchanged.
+- `src/erp/periods.py`: `fiscal_year_ending_on(date, fy_end_month)`.
+- `src/erp/agent/tools.py`: run_dcf returns each input fact as evidence (with page) and as a
+  number, the DCF evidence lists them as `input_evidence_ids` (so answers cite them), plus numbers
+  for each resolved input and each adjustment; the unverified note goes into tool notes, hence the
+  Answer's limitations.
+- UI (`view_model.py`, `app.py`): DCF path has `inputs` (origin database / assumptions file, fact
+  chips with pages, adjustments marked "Judgement adjustment", lease treatment line, unverified
+  caption) and a "From" column in the assumptions tables (DCF tab and calculation path). Old saved
+  runs (--demo) without `db_inputs` show every input as "assumptions file".
+- `tests/test_ui_polish.py`: the demo-page fixture now adds the FY26 DCF input facts from the manual
+  CSV (the frozen 10-fact fixture lacks them, so the DCF tab correctly refused); one new page test.
+- Full suite without `tests/test_ollama_integration.py`: 761 passed. Checked in the browser (demo
+  mode): DCF tab shows the inputs with page chips and adjustments.
+- Docs: `docs/D2_dcf_inputs_from_database.md`, `docs/M3_dcf_engine.md` section 8, NOTES.md.
+
+**Result check (no change)**: base 1,914.82, bear 1,445.11, bull 2,351.66 INR per share, as before.
+Equity values bit-identical. Per share differs in the 9th significant figure because the old YAML
+rounded the share count (361.80875 vs 361.8087518 crore); exact floats in NOTES.md.
+
+**Decisions**
+- Period = the fiscal year ending on the valuation date; valuation date must be a fiscal year end.
+- Basis is in the YAML (`facts_basis`), not code.
+- Adjustments are signed numbers in the file's units.
+- Leases: facts are still fetched (and must exist) even when the bridge uses 0, so the record shows
+  what was excluded.
+- Typed `value` still allowed for these inputs (toy fixture); a test guards the real file.
+- Unverified inputs: a note, not a check (does not flip `all_checks_passed`).
+
+**Known issues / flags for the author**
+- The local `data/db/sample.sqlite` was rebuilt at 20:33 today outside this session's commands; it
+  now shows all 54 facts signed off, so the live UI shows no unverified note.
+- More citations and numbers per DCF answer may move eval DCF scores (citations, composer prompt).
+  Eval not run.
+
+**What to review**: see the end of the session summary (YAML rationales for the adjustments, the
+share-count note, the lease treatment line, the UI wording).
+
+**Next**: author review; commit when told. Nothing committed.
+
 ## 2026-10-08 — D1: expanded TCS facts from the FY26 annual report
 
 **Done** (tests first: `tests/test_d1_facts.py`, 52 tests, written before the config, data and code)
