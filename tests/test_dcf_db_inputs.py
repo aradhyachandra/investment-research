@@ -45,7 +45,8 @@ from test_ui import FOOTER, UI_CFG
 TCS_YAML = REPO / "data" / "manual" / "dcf_inputs.yaml"
 DB_INPUTS = {"base_year_revenue", "cash_and_investments", "lease_liabilities", "minority_interest",
              "diluted_shares"}
-PINNED = {"base": (1914.8185251855948, 692798.0970742435, 1914.82),
+# base re-pinned 2026-10-10 after the author lowered base revenue growth to a flat 6% (was 1914.82)
+PINNED = {"base": (1880.5285611688391, 680391.6914407477, 1880.53),
           "bear": (1445.1121760470942, 522854.230025379, 1445.11),
           "bull": (2351.66131697048, 850851.6415164431, 2351.66)}
 
@@ -205,7 +206,7 @@ def test_all_verified_gives_no_unverified_note(tcs):
 def test_unverified_inputs_are_noted_but_the_run_works(conn, ctx):
     db = _load(conn, ctx, _unverify(manual_rows(), {"current_investments", "non_controlling_interests"}))
     r = run_dcf(db, "TCS", "base")
-    assert round(r.valuation.value_per_share, 2) == 1914.82
+    assert round(r.valuation.value_per_share, 2) == 1880.53
     assert len(r.unverified_fact_ids) == 2
     assert any("uses 2 facts not yet verified by a human" in n for n in r.notes)
 
@@ -396,7 +397,7 @@ def test_dcf_path_for_an_old_saved_run_without_db_inputs(tcs):
 def test_dcf_tab_carries_the_input_sources(tcs):
     env = ToolEnv(conn=tcs, ticker="TCS", display=DISPLAY, dcf_assumptions=TCS_YAML)
     v = dcf_view.build_dcf_tab(env, ["bear", "base", "bull"], base="base", assumptions_file=TCS_YAML, footer=FOOTER)
-    assert [b.display for b in v.scenarios] == ["INR 1,445.11 per share", "INR 1,914.82 per share",
+    assert [b.display for b in v.scenarios] == ["INR 1,445.11 per share", "INR 1,880.53 per share",
                                                 "INR 2,351.66 per share"]
     assert {i.name for i in v.base.inputs if i.origin == "database"} == DB_INPUTS
 

@@ -27,9 +27,9 @@ shared:
     rationale: "FY26 consolidated revenue from operations (267,021 when this file was converted to database inputs)."
     source: "Facts database: revenue_from_operations, FY26 consolidated (AR FY26 statement of profit and loss, PDF p.167)"
   revenue_growth:
-    value: [0.06, 0.07, 0.07, 0.065, 0.06]
-    rationale: "FY26 grew 4.6% (267,021 vs 255,324). Base assumes modest recovery then fade to ~6%. Judgement, not a forecast."
-    source: "AR FY26 PDF p.167 for history; draft judgement"
+    value: [0.06, 0.06, 0.06, 0.06, 0.06]
+    rationale: "Flat 6% a year. Inside TCS's own FY24-FY26 range (6.85%, 5.99%, 4.58%; D4 history check) and close to its FY23-FY26 CAGR (5.80%), with a modest recovery from FY26's 4.6%. Lowered from [6%, 7%, 7%, 6.5%, 6%] on 2026-10-10 because the 7% years sat above every recent year. Judgement, not a forecast."
+    source: "Facts database FY23-FY26 revenue (AR FY24/FY25/FY26); author decision 2026-10-10"
   ebit_margin:
     value: 0.247
     rationale: "Lease-adjusted EBIT = PBT before exceptional 70,013 - other income 4,402 + finance costs 1,227 - lease interest 778 = 66,060, i.e. 24.7% of revenue. Excludes other income and the one-off exceptional charge; lease interest deducted because leases are treated as an operating cost."

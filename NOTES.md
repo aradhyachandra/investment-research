@@ -589,3 +589,9 @@ TODO (need data we don't have yet):
   TO VERIFY the real limit, and consider closing clients in a fixture teardown.
 
 - 2026-10-07 (resolved): tests/test_ollama_integration.py is now opt-in (ERP_LIVE_TESTS=1). A plain pytest never calls the live model.
+
+## 2026-10-10: base-case revenue growth lowered (author decision)
+- Base revenue_growth changed from [6%, 7%, 7%, 6.5%, 6%] to a flat 6% after the D4 history check showed the 7% years above every year in FY24-FY26 (6.85%, 5.99%, 4.58%; FY23-FY26 CAGR 5.80%). Bear and bull unchanged.
+- Effect: base value per share INR 1,914.82 -> INR 1,880.53 (equity value INR 692,798 -> 680,392 crore; TV share of EV 70.25% -> 69.96%). Bear 1,445.11 and bull 2,351.66 unchanged. All D4 base checks now pass.
+- The frozen v1 eval (eval/questions.jsonl, test run 20261007-132850) used the old assumptions; its DCF gold (EV-D01 etc.) reflects 1,914.82 and stays as the record of that run. Any future eval needs a new question file and is reported separately.
+- The 24 D4 facts were signed off by the author on 2026-10-10 (all 178 facts now verified).

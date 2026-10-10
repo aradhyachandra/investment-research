@@ -153,27 +153,27 @@ TCS,purchase_of_intangibles,FY24,consolidated,442,INR_CRORE,tcs_annual_report_FY
 TCS,purchase_of_intangibles,FY23,consolidated,355,INR_CRORE,tcs_annual_report_FY24.pdf,184,184,Claude,Aradhya Chandra,2026-10-10
 TCS,shares_outstanding,FY24,consolidated,3618087518,SHARES,tcs_annual_report_FY24.pdf,203,203,Claude,Aradhya Chandra,2026-10-10
 TCS,shares_outstanding,FY23,consolidated,3659051373,SHARES,tcs_annual_report_FY24.pdf,203,203,Claude,Aradhya Chandra,2026-10-10
-TCS,operating_profit_before_wc_changes,FY26,consolidated,68688,INR_CRORE,tcs_annual_report_FY26.pdf,172,202,Claude,,
-TCS,operating_profit_before_wc_changes,FY25,consolidated,67853,INR_CRORE,tcs_annual_report_FY26.pdf,172,202,Claude,,
-TCS,cash_generated_from_operations,FY26,consolidated,66478,INR_CRORE,tcs_annual_report_FY26.pdf,172,202,Claude,,
-TCS,cash_generated_from_operations,FY25,consolidated,64494,INR_CRORE,tcs_annual_report_FY26.pdf,172,202,Claude,,
-TCS,depreciation_right_of_use_assets,FY26,consolidated,1866,INR_CRORE,tcs_annual_report_FY26.pdf,200,230,Claude,,
-TCS,depreciation_right_of_use_assets,FY25,consolidated,1820,INR_CRORE,tcs_annual_report_FY26.pdf,200,230,Claude,,
-TCS,interest_on_lease_liabilities,FY26,consolidated,778,INR_CRORE,tcs_annual_report_FY26.pdf,200,230,Claude,,
-TCS,interest_on_lease_liabilities,FY25,consolidated,631,INR_CRORE,tcs_annual_report_FY26.pdf,200,230,Claude,,
-TCS,operating_profit_before_wc_changes,FY25,consolidated,67853,INR_CRORE,tcs_annual_report_FY25.pdf,184,182,Claude,,
-TCS,operating_profit_before_wc_changes,FY24,consolidated,63709,INR_CRORE,tcs_annual_report_FY25.pdf,184,182,Claude,,
-TCS,cash_generated_from_operations,FY25,consolidated,64494,INR_CRORE,tcs_annual_report_FY25.pdf,184,182,Claude,,
-TCS,cash_generated_from_operations,FY24,consolidated,56827,INR_CRORE,tcs_annual_report_FY25.pdf,184,182,Claude,,
-TCS,depreciation_right_of_use_assets,FY25,consolidated,1820,INR_CRORE,tcs_annual_report_FY25.pdf,205,203,Claude,,
-TCS,depreciation_right_of_use_assets,FY24,consolidated,1716,INR_CRORE,tcs_annual_report_FY25.pdf,205,203,Claude,,
-TCS,interest_on_lease_liabilities,FY25,consolidated,631,INR_CRORE,tcs_annual_report_FY25.pdf,206,204,Claude,,
-TCS,interest_on_lease_liabilities,FY24,consolidated,518,INR_CRORE,tcs_annual_report_FY25.pdf,206,204,Claude,,
-TCS,operating_profit_before_wc_changes,FY24,consolidated,63709,INR_CRORE,tcs_annual_report_FY24.pdf,184,184,Claude,,
-TCS,operating_profit_before_wc_changes,FY23,consolidated,59148,INR_CRORE,tcs_annual_report_FY24.pdf,184,184,Claude,,
-TCS,cash_generated_from_operations,FY24,consolidated,56827,INR_CRORE,tcs_annual_report_FY24.pdf,184,184,Claude,,
-TCS,cash_generated_from_operations,FY23,consolidated,54931,INR_CRORE,tcs_annual_report_FY24.pdf,184,184,Claude,,
-TCS,depreciation_right_of_use_assets,FY24,consolidated,1716,INR_CRORE,tcs_annual_report_FY24.pdf,206,206,Claude,,
-TCS,depreciation_right_of_use_assets,FY23,consolidated,1634,INR_CRORE,tcs_annual_report_FY24.pdf,206,206,Claude,,
-TCS,interest_on_lease_liabilities,FY24,consolidated,518,INR_CRORE,tcs_annual_report_FY24.pdf,206,206,Claude,,
-TCS,interest_on_lease_liabilities,FY23,consolidated,492,INR_CRORE,tcs_annual_report_FY24.pdf,206,206,Claude,,
+TCS,operating_profit_before_wc_changes,FY26,consolidated,68688,INR_CRORE,tcs_annual_report_FY26.pdf,172,202,Claude,Aradhya Chandra,2026-10-10
+TCS,operating_profit_before_wc_changes,FY25,consolidated,67853,INR_CRORE,tcs_annual_report_FY26.pdf,172,202,Claude,Aradhya Chandra,2026-10-10
+TCS,cash_generated_from_operations,FY26,consolidated,66478,INR_CRORE,tcs_annual_report_FY26.pdf,172,202,Claude,Aradhya Chandra,2026-10-10
+TCS,cash_generated_from_operations,FY25,consolidated,64494,INR_CRORE,tcs_annual_report_FY26.pdf,172,202,Claude,Aradhya Chandra,2026-10-10
+TCS,depreciation_right_of_use_assets,FY26,consolidated,1866,INR_CRORE,tcs_annual_report_FY26.pdf,200,230,Claude,Aradhya Chandra,2026-10-10
+TCS,depreciation_right_of_use_assets,FY25,consolidated,1820,INR_CRORE,tcs_annual_report_FY26.pdf,200,230,Claude,Aradhya Chandra,2026-10-10
+TCS,interest_on_lease_liabilities,FY26,consolidated,778,INR_CRORE,tcs_annual_report_FY26.pdf,200,230,Claude,Aradhya Chandra,2026-10-10
+TCS,interest_on_lease_liabilities,FY25,consolidated,631,INR_CRORE,tcs_annual_report_FY26.pdf,200,230,Claude,Aradhya Chandra,2026-10-10
+TCS,operating_profit_before_wc_changes,FY25,consolidated,67853,INR_CRORE,tcs_annual_report_FY25.pdf,184,182,Claude,Aradhya Chandra,2026-10-10
+TCS,operating_profit_before_wc_changes,FY24,consolidated,63709,INR_CRORE,tcs_annual_report_FY25.pdf,184,182,Claude,Aradhya Chandra,2026-10-10
+TCS,cash_generated_from_operations,FY25,consolidated,64494,INR_CRORE,tcs_annual_report_FY25.pdf,184,182,Claude,Aradhya Chandra,2026-10-10
+TCS,cash_generated_from_operations,FY24,consolidated,56827,INR_CRORE,tcs_annual_report_FY25.pdf,184,182,Claude,Aradhya Chandra,2026-10-10
+TCS,depreciation_right_of_use_assets,FY25,consolidated,1820,INR_CRORE,tcs_annual_report_FY25.pdf,205,203,Claude,Aradhya Chandra,2026-10-10
+TCS,depreciation_right_of_use_assets,FY24,consolidated,1716,INR_CRORE,tcs_annual_report_FY25.pdf,205,203,Claude,Aradhya Chandra,2026-10-10
+TCS,interest_on_lease_liabilities,FY25,consolidated,631,INR_CRORE,tcs_annual_report_FY25.pdf,206,204,Claude,Aradhya Chandra,2026-10-10
+TCS,interest_on_lease_liabilities,FY24,consolidated,518,INR_CRORE,tcs_annual_report_FY25.pdf,206,204,Claude,Aradhya Chandra,2026-10-10
+TCS,operating_profit_before_wc_changes,FY24,consolidated,63709,INR_CRORE,tcs_annual_report_FY24.pdf,184,184,Claude,Aradhya Chandra,2026-10-10
+TCS,operating_profit_before_wc_changes,FY23,consolidated,59148,INR_CRORE,tcs_annual_report_FY24.pdf,184,184,Claude,Aradhya Chandra,2026-10-10
+TCS,cash_generated_from_operations,FY24,consolidated,56827,INR_CRORE,tcs_annual_report_FY24.pdf,184,184,Claude,Aradhya Chandra,2026-10-10
+TCS,cash_generated_from_operations,FY23,consolidated,54931,INR_CRORE,tcs_annual_report_FY24.pdf,184,184,Claude,Aradhya Chandra,2026-10-10
+TCS,depreciation_right_of_use_assets,FY24,consolidated,1716,INR_CRORE,tcs_annual_report_FY24.pdf,206,206,Claude,Aradhya Chandra,2026-10-10
+TCS,depreciation_right_of_use_assets,FY23,consolidated,1634,INR_CRORE,tcs_annual_report_FY24.pdf,206,206,Claude,Aradhya Chandra,2026-10-10
+TCS,interest_on_lease_liabilities,FY24,consolidated,518,INR_CRORE,tcs_annual_report_FY24.pdf,206,206,Claude,Aradhya Chandra,2026-10-10
+TCS,interest_on_lease_liabilities,FY23,consolidated,492,INR_CRORE,tcs_annual_report_FY24.pdf,206,206,Claude,Aradhya Chandra,2026-10-10

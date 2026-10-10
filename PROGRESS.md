@@ -1100,3 +1100,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/pytest
 PYTHONPATH=src .venv/bin/python -m erp.db.load_facts --csv data/sample/facts_sample.csv --entry-method llm_extracted --replace
 ```
+
+## 2026-10-10: D4 sign-off and base growth decision
+- 24 D4 facts signed off by the author; database rebuilt: 178 facts, 0 unverified.
+- Base revenue growth lowered to a flat 6% (author decision after the D4 history check). Base value per share now INR 1,880.53 (was 1,914.82); bear and bull unchanged. Tests re-pinned. See NOTES.md.

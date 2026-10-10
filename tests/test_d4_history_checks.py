@@ -46,7 +46,7 @@ facts (test_d3_history.py docstring), NOT by calling the code under test.
   FY23 growth and FY23 nwc need FY22 revenue: not in the database, so n/a.
 
 Expected check results with the tolerance in config/dcf.yaml (0: inside the observed min-max):
-  base: revenue_growth warn (7% > 6.85%), others pass
+  base: all pass (revenue growth a flat 6%, inside 4.58%-6.85%; was warn at 7% before 2026-10-10)
   bear: revenue_growth warn (all below 4.58%), ebit_margin warn (23.5% < 23.84%), tax_rate warn (27% > 25.66%)
   bull: revenue_growth warn, ebit_margin warn (25.5% > 24.74%)
 """
@@ -109,7 +109,7 @@ EXPECTED = {   # assumption -> {period: value or None}
 }
 CAGR = 0.058018486193645
 STATUS = {
-    "base": {"revenue_growth": "warn", "ebit_margin": "pass", "tax_rate": "pass", "da_pct_revenue": "pass",
+    "base": {"revenue_growth": "pass", "ebit_margin": "pass", "tax_rate": "pass", "da_pct_revenue": "pass",
              "capex_pct_revenue": "pass", "nwc_pct_incremental_revenue": "pass"},
     "bear": {"revenue_growth": "warn", "ebit_margin": "warn", "tax_rate": "warn", "da_pct_revenue": "pass",
              "capex_pct_revenue": "pass", "nwc_pct_incremental_revenue": "pass"},
@@ -118,10 +118,11 @@ STATUS = {
 }
 
 # Values per share and equity values BEFORE D4 (commit 880a647), exact floats. D4 must not move them.
-PINNED = {"base": (1914.8185156593645, 692798.0970742435),
+# base re-pinned 2026-10-10: base revenue growth lowered to a flat 6% by the author (was 1914.8185156593645)
+PINNED = {"base": (1880.5285611688391, 680391.6914407477),
           "bear": (1445.112168857655, 522854.230025379),
           "bull": (2351.6613052709554, 850851.6415164431)}
-DCF_INPUTS_SHA256 = "166ce0d68e2045481c6a8d3546ef87028e0cdad73ebe837de02d16a6e616b178"
+DCF_INPUTS_SHA256 = "20c1c1982dbbb1cbdbf1e6b6469827da584d12c5742b4ad1e442470032e78be7"
 
 
 def all_rows():
@@ -149,12 +150,12 @@ def checks_by_name(h: DCFHistory):
 
 # ---------- the new facts ----------
 
-def test_d4_rows_are_claude_entries_not_yet_verified_with_both_pages(ctx):
+def test_d4_rows_are_claude_entries_signed_off_with_both_pages(ctx):
     rows = d4_rows()
     assert len(rows) == 24
     for r in rows:
         assert r["entered_by"] == "Claude", r
-        assert r["verified_by"] == "" and r["verified_on"] == "", r
+        assert r["verified_by"] == "Aradhya Chandra" and r["verified_on"] == "2026-10-10", r   # D4 sign-off
         assert r["ticker"] == "TCS" and r["basis"] == "consolidated" and r["reported_unit"] == "INR_CRORE"
         labels = parse_page_labels(ctx.sources[r["source_doc"]]["page_labels"])
         page = int(r["source_page"])
@@ -269,11 +270,8 @@ def test_rows_carry_their_facts_with_pages(full):
 
 def test_unverified_history_facts_are_listed(full):
     h = assumptions_vs_history(full, "TCS", "base", TCS_YAML)
-    # The 24 D4 rows are unverified; the history uses all FY23-FY26 ones.
-    unverified = {int(x.removeprefix("fact:")) for x in h.unverified_fact_ids}
-    d4 = {r[0] for r in full.execute(
-        "SELECT fact_id FROM fact WHERE metric_id IN (?,?,?,?) AND verified_by IS NULL", sorted(D4_METRICS))}
-    assert unverified and unverified <= d4
+    # All facts are signed off (D4 rows on 2026-10-10), so nothing is listed as unverified.
+    assert h.unverified_fact_ids == []
 
 
 # ---------- checks ----------
@@ -295,9 +293,12 @@ def test_check_status_per_scenario(full, scenario):
 
 
 def test_check_reports_which_forecast_years_are_outside(full):
-    c = checks_by_name(assumptions_vs_history(full, "TCS", "base", TCS_YAML))["revenue_growth"]
-    assert c.values == [0.06, 0.07, 0.07, 0.065, 0.06]
-    assert c.outside == [2, 3]                       # 7% twice; 6.5% and 6% are inside 4.58%-6.85%
+    # Base is a flat 6% since 2026-10-10 (inside history); the bull case is above it in every year.
+    base = checks_by_name(assumptions_vs_history(full, "TCS", "base", TCS_YAML))["revenue_growth"]
+    assert base.outside == [] and base.status == "pass"
+    c = checks_by_name(assumptions_vs_history(full, "TCS", "bull", TCS_YAML))["revenue_growth"]
+    assert c.values == [0.09, 0.10, 0.10, 0.09, 0.08]
+    assert c.outside == [1, 2, 3, 4, 5]              # all above the FY24-FY26 maximum of 6.85%
     assert "above" in c.detail
 
 
@@ -407,13 +408,13 @@ def test_dcf_tab_has_an_assumptions_vs_history_table(tcs_env):
     assert ebit.range == "23.84% to 24.74% (average 24.27%)"
     assert ebit.status == {"bear": "warn", "base": "pass", "bull": "warn"}
     growth = rows["revenue_growth"]
-    assert growth.scenario_values["base"] == "6.00%, 7.00%, 7.00%, 6.50%, 6.00%"
+    assert growth.scenario_values["base"] == "6.00%"           # same value every year is shown once
     assert growth.years["FY23"] == "n/a"
     assert "5.80%" in growth.note                    # CAGR shown with the row
     # Page chips for the facts used.
     assert ebit.chips and all(c.page_text for c in ebit.chips)
     assert any("PDF p.200" in c.page_text for c in ebit.chips)
-    assert t.tolerance_rule and t.unverified_fact_ids
+    assert t.tolerance_rule and not t.unverified_fact_ids
 
 
 def test_dcf_tab_history_with_no_history_data(loaded, tmp_path):

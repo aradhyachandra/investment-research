@@ -115,3 +115,5 @@ Then `PYTHONPATH=src:tests .venv/bin/pytest -q tests/test_d4_history_checks.py`:
 `test_d4_rows_are_claude_entries_not_yet_verified_with_both_pages` and
 `test_unverified_history_facts_are_listed` pin "not verified" for these rows and will need updating,
 as after the D1 and D3 sign-offs.
+
+**Status:** all 24 facts reviewed and signed off by Aradhya Chandra on 2026-10-10.
