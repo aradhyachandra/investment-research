@@ -1,5 +1,65 @@
 # PROGRESS
 
+## 2026-10-10 — U1: fixed answers for meta questions, accurate refusal reasons
+
+**Done** (tests first: `tests/test_u1_meta_answers.py`, 77 tests, new phrasings only; seen failing at
+import before the code). Router prompt unchanged; all code + config.
+1. Help / about intent: `about.patterns` + `about.text` in `config/agent.yaml`; `guardrails.about_intent`
+   (whole-question match); `loop.py` answers with `composed_by="about"` after the refusal pre-check,
+   before the router (no LLM, no tools). `Answer.composed_by` gains "about". UI: blue
+   "About this assistant" badge, normal answer box, fixed status lines (`view_model`, `app.py`).
+2. New pre-check reason `no_market_data` (share/stock price, market cap, market value, P/E, dividend
+   yield, trading at, 52-week): fixed text "I don't have market price data; this tool works from TCS's
+   annual reports." Order: advice, then price_prediction, then no_market_data; another company's price
+   -> other_company. Buyback price, face value and "what does the report say about the share price" pass.
+3. Over-refusal: **the pattern pre-check was not the cause**; both reported questions pass it. The
+   model refused V11-E02 (saved answer: `route.problems` empty, raw reply `investment_advice`). Fix in
+   code: `router.advice_refusal_is_factual` (`router.factual_override` in config: factual opener +
+   dividend/share/EPS topic + no judging/personal words) turns a model `investment_advice` refusal into
+   a filings search, plus a fact lookup when exactly one metric is named.
+- Docs: `docs/U1_meta_answers.md`; NOTES.md (U1). `.claude/launch.json` (gitignored) gained `ui-live`.
+
+**Results**
+- Live, qwen2.5:3b: v1 guardrail phrasings **12 of 13** (same miss: industry average); provisional dev
+  routing **20 of 20**. About text's 5 example questions all answered live. Override fired live on
+  "How much dividend per share did TCS pay for FY24?" (model refused; code searched; answered).
+- Tests in batches: U1 77 (1 s); guardrails+router+loop+e3+m5+m6 205 (19 s); remaining 25 files in
+  three batches (82 s, 21 s, 18 s; 2 skipped); ui + ui_polish 84 (39 s). No failures.
+  1,075 collected (998 + 77). No test split run; no question file, data/ or DCF edited.
+
+**Decisions**
+- About text says three annual reports (FY24-FY26) covering FY23-FY26, not "four annual reports" as in
+  the brief: the database has three annual-report sources; FY23 comes from FY24 comparatives. A test
+  checks the count (178), the year range and the report years against `data/db/sample.sqlite`.
+- Refusal reasons checked before about intent, so advice can never get the about answer.
+- `config/eval.yaml` not changed: an unknown refusal reason (`no_market_data`) already scores as
+  `not_available` (score.py). Whether it should count as "refuse" is the author's call.
+- "recommended" is Board wording, so only "you recommend" / "recommendation" are judging words.
+
+**Known issues / flags for the author**
+- README (lines ~257 and ~303) says V11-E02 was refused "by the advice pre-check"; it was the model.
+  Not edited (not in the brief); suggested wording in NOTES.md.
+- The override rescues the refusal, not retrieval: "What can you tell me about TCS's dividends in FY25?"
+  is now answered but by the template from an unrelated passage (known dividend retrieval miss).
+  The FY24 dividend answer gave the final dividend only; not checked against gold (would be tuning).
+- TO VERIFY: TCS annual reports do print a share-price table; "no market price data" is true of the
+  database, not strictly of the PDFs.
+
+**What to review**: the `about.text` wording (your name, the counts, the five examples);
+`no_market_data` and `router.factual_override` patterns in `config/agent.yaml`;
+`advice_refusal_is_factual` / `_factual_calls` in `src/erp/agent/router.py`; the about branch in
+`src/erp/agent/loop.py`; the README correction; whether `no_market_data` should be a "refuse" reason
+in `config/eval.yaml`.
+
+**Next**: author review; commit when told.
+
+**How to run**
+```
+PYTHONPATH=src:tests .venv/bin/pytest -q tests/test_u1_meta_answers.py tests/test_guardrails.py tests/test_router.py
+PYTHONPATH=src:tests .venv/bin/python tests/run_guardrail_phrasings.py
+PYTHONPATH=src:tests .venv/bin/python tests/run_provisional_dev.py --route-only
+```
+
 ## 2026-10-10 — E3: fix the v1.1 dev failures
 
 **Done** (`tests/test_e3_dev_fixes.py`, 39 tests, new phrasings in neither question file, checked

@@ -9,7 +9,8 @@ Code, not the LLM, decides: refusals (fixed texts; a pattern pre-check runs befo
 what counts as a number used (the tool numbers the verifier finds in the text), citations
 (evidence of those numbers and their inputs, plus cited chunks), and the fallback answer when
 the LLM's reply cannot be used or fails the verifier (a template built from the tool results).
-Answers that used run_dcf end with a fixed footer line added by code.
+Answers that used run_dcf end with a fixed footer line added by code. A help / about question
+("what can you do?") gets a fixed answer from config before the router (U1).
 No arithmetic happens in the LLM: every figure it sees is already formatted by code.
 
 CLI:  PYTHONPATH=src .venv/bin/python -m erp.agent.loop "What was TCS's revenue in FY26?"
@@ -21,7 +22,7 @@ import sqlite3
 import sys
 
 from erp.agent.answer_schema import Answer
-from erp.agent.guardrails import latest_period, other_company_names, precheck
+from erp.agent.guardrails import about_intent, latest_period, other_company_names, precheck
 from erp.agent.llm import LLMError, call_llm, load_agent_config
 from erp.agent.router import RoutePlan, build_catalog, route
 from erp.agent.tools import ToolEnv, ToolResult, run_tool
@@ -35,6 +36,7 @@ REFUSAL_TEXT = {
     "investment_advice": "I can't give personal investment advice or say what anyone should do with "
                          "TCS shares. " + _CAN_DO,
     "price_prediction": "I can't forecast share prices or market movements. " + _CAN_DO,
+    "no_market_data": "I don't have market price data; this tool works from TCS's annual reports. " + _CAN_DO,
     "other_company": "This version covers TCS only, so I can't answer about other companies or compare "
                      "TCS with them. " + _CAN_DO,
     "outside_data": "That figure or period is not in the data loaded so far, so I can't answer it "
@@ -171,6 +173,14 @@ def answer_question(question: str, env: ToolEnv, llm_fn=call_llm, *, cfg: dict |
         plan = RoutePlan(question_type="out_of_scope", refusal_reason=reason, refuse=True,
                          problems=["refused by the pattern pre-check (guardrails.py); the router was not called"])
         return _refusal(question, env, plan, reason, REFUSAL_TEXT[reason])
+
+    # 0b. help / about questions: a fixed answer from config, no LLM, no tools (U1)
+    if about_intent(question, cfg["about"]["patterns"]):
+        return Answer(question=question, ticker=env.ticker, answer_text=cfg["about"]["text"].strip(),
+                      numbers_used=[], citations=[], refused=False, composed_by="about",
+                      route=RoutePlan(question_type="out_of_scope", problems=[
+                          "help / about question: fixed answer from config (guardrails.about_intent); "
+                          "the router was not called"]))
 
     catalog = build_catalog(env.conn, env.ticker, env.dcf_assumptions)
 

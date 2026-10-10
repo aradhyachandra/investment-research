@@ -255,7 +255,9 @@ All finished dev runs (the table shows the last one):
 numeric questions were scored wrong. V11-B04 gave the correct share count (365.91 crore shares) but
 the gold is in plain shares and the scorer does not convert units, so it counts as wrong; it is left
 as the harness produced it. V11-E02 ("What total dividend per share did TCS declare for FY25?") was
-wrongly refused by the advice pre-check, a real over-refusal.
+wrongly refused as investment advice by the model router, a real over-refusal. (After the test run,
+milestone U1 added a code rule that overrides this kind of refusal for factual dividend/EPS/share
+questions; the recorded test result is unchanged.)
 
 **Limitations of the evaluation:** small n (v1: 20 dev, 21 test; v1.1: 22 dev, 23 test), one company,
 one small model; the
@@ -300,8 +302,9 @@ This project was built with an AI coding assistant, milestone by milestone, from
     sometimes renders ₹ as "H", e.g. "H1,761 crore"), so such figures are neither grounded nor
     flagged.
   - The router prompt is fragile with a 3B model; small wording changes move routing results.
-  - The advice pre-check can over-refuse factual questions that mention shares and money together
-    (seen on the v1.1 test split: a dividend-per-share question was refused as investment advice).
+  - The model router can over-refuse factual questions that mention shares and money together as
+    investment advice (seen on the v1.1 test split). U1 added a code override for factual
+    dividend/EPS/share questions; other phrasings may still be over-refused.
   - When the verifier rejects the model's text, the code-built fallback answer can quote passages
     that are irrelevant or garbled (seen on EV-F01 dev and EV-F02 test: a CSR "average net profit"
     paragraph). Every number in it is sourced, but it does not answer the question.

@@ -28,6 +28,11 @@ E3, decided by code (dev failures of the v1.1 eval, docs/E3_dev_fixes.md):
   names, not once per year of a range (V11-C11: a 3-year CAGR asked for FY23, FY24, FY25 and FY26).
 - A group of metrics named by its family name ("exceptional items", from display names "Exceptional
   items - <line>") gets the stored facts of the group for the named year (V11-E01: a search only).
+
+U1, decided by code: a model refusal "investment_advice" of a plain factual question about dividends,
+shares or EPS (config/agent.yaml `router.factual_override`) is not kept; the filings are searched,
+plus a fact lookup when the question names one metric (V11-E02: "What total dividend per share did
+TCS declare for FY25?" was refused by the model, not by the pattern pre-check). Router prompt unchanged.
 """
 import json
 import re
@@ -38,6 +43,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel
 
+from erp.agent.llm import load_agent_config
 from erp.agent.tools import ARGS_MODELS, TOOL_NAMES, ToolCall
 from erp.agent.verifier import period_spans, periods_in
 from erp.ingest.pdf_to_chunks import load_ingest_config
@@ -518,6 +524,28 @@ _DATA_TOOLS = ("get_financial_fact", "compute_ratio")
 _NOT_LISTED_OVERRIDES = ("outside_data", "investment_advice", "price_prediction")
 
 
+def advice_refusal_is_factual(question: str, override: dict | None = None) -> bool:
+    """U1: True when a model "investment_advice" refusal should not stand: the question opens like a
+    factual question, names a dividend / share / EPS topic, and has no judging or personal words
+    (config/agent.yaml `router.factual_override`). Advice phrasings are refused by the pattern
+    pre-check before the router in any case; this only stops the model over-refusing."""
+    o = override or load_agent_config()["router"]["factual_override"]
+    return bool(re.search(o["opener"], question, re.I) and re.search(o["topic"], question, re.I)
+                and not re.search(o["judging"], question, re.I))
+
+
+def _factual_calls(question: str, catalog: Catalog) -> list[dict]:
+    """The plan for an overridden advice refusal: search the filings for the question, and look up the
+    one metric the question names (if exactly one, and no ratio) for each named period with data."""
+    items = [{"tool": "search_documents", "query": question}]
+    named = names_in(question, catalog)
+    if len(named) == 1 and next(iter(named))[0] == "metric":
+        ((_, metric),) = named
+        items += [{"tool": "get_financial_fact", "metric_id": metric, "period": p, "basis": "consolidated"}
+                  for p in dict.fromkeys(periods_in(question)) if p in catalog.periods]
+    return items
+
+
 def _missing_years(calls: list[ToolCall], periods: list[str], max_calls: int, problems: list[str]) -> list[ToolCall]:
     """The rule "a change between two years needs one call per year", enforced in code: when the
     question names two or more periods with data and a fact/ratio was fetched for only some of them,
@@ -559,6 +587,12 @@ def route(question: str, catalog: Catalog, llm_fn, *, max_calls: int) -> RoutePl
         problems.append(f"router refused ({qtype}, {reason}) while asking for a figure not in the metric list; "
                         "not a refusal reason, so the filings are searched")
         qtype, reason = "qualitative", "none"
+    if reason == "investment_advice" and advice_refusal_is_factual(question):
+        items = _factual_calls(question, catalog)
+        problems.append("router refused (investment_advice) a factual question about dividends, shares or EPS; "
+                        "not advice, so the filings are searched" + (" and the named figure looked up"
+                                                                     if len(items) > 1 else ""))
+        qtype, reason = ("mixed" if len(items) > 1 else "qualitative"), "none"
     if qtype == "out_of_scope" or reason != "none":
         return RoutePlan(question_type=qtype, refusal_reason=reason if reason != "none" else "outside_scope",
                          refuse=True, raw=reply.text, model=reply.model)

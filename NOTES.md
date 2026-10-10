@@ -2,6 +2,25 @@
 
 Open questions, TO VERIFY items, and validation TODOs. Newest first.
 
+## U1 meta answers and refusal reasons (2026-10-10)
+
+- **V11-E02 cause**: the model router, not the pattern pre-check (saved test answer: no pre-check
+  problem line; raw reply `investment_advice`). Only this one known test case was looked at.
+  Suggested README wording: "was wrongly refused as investment advice by the model router (the
+  pattern pre-check passed it)". Not edited.
+- **Factual override** (`router.factual_override`): opener + topic + no judging words. Words chosen by
+  Claude, not the author. TO VERIFY (author): is the judging list too wide ("view", "good" also block
+  e.g. "What is a good summary of TCS's dividends?") or too narrow?
+- **About text counts**: 178 facts, all with `verified_by`; three annual reports (FY24, FY25, FY26);
+  FY23 = comparatives from the FY24 report. The brief said four reports. A test ties text to the DB;
+  if facts are added, update the text.
+- **no_market_data**: TO VERIFY whether the annual reports' share-price tables (corporate governance
+  report) should be searchable instead. Scored as `not_available` by the eval (unknown reason default);
+  not added to `refuse_reasons` (author's call).
+- **No market data vs other company**: another company's share price returns `other_company`.
+- About patterns are whole-question matches; "help me decide whether to buy TCS" is not about intent
+  (not caught by the pre-check either, so it is left to the router as before; not checked live).
+
 ## E3 v1.1 dev fixes (2026-10-10)
 
 - **Named ratio** (router, code): ratio names = display name minus brackets, plus the definition

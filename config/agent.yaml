@@ -18,6 +18,14 @@ default_ticker: TCS
 
 router:
   max_tool_calls: 4        # a mixed question may need e.g. two ratios + a document search
+  # U1: the model sometimes refuses a plain factual question about dividends, shares or EPS as
+  # "investment_advice" (seen on the v1.1 test split; the pattern pre-check passed it). Code keeps
+  # that refusal unless the question opens like a factual question, names one of the topics, and
+  # has none of the judging/personal words; then the filings are searched instead (router.py).
+  factual_override:
+    opener: '^\W*(what|how much|how many|when|which|did|does|was|were|has|list)\b'
+    topic: '\b(dividends?|payouts?|eps|earnings per (equity )?share|shares?|buy[\s-]*backs?)\b'
+    judging: '\b(should|would|could|i|my|mine|we|our|us|you recommend\w*|recommendations?|advi[sc]\w*|suggest\w*|worth|good|bad|better|best|wise|safe|risky|attractive|opportunit\w*|think|opinion|view)\b'
 
 tools:
   search_top_k: 5          # chunks returned by search_documents per call
@@ -96,6 +104,51 @@ guardrails:
     - '\bwill\b.*\b(share|stock) price\b'
     - '\b(predict|forecast|projection of)\b.*\b(price|stock|shares)\b'
     - '\bwill (tcs|it|the stock|the shares?) (go|move|rise|fall|gain|drop|climb)\b'
+  # U1: the share price, market capitalisation or a price multiple for a past or current period.
+  # Checked after price_prediction (a forecast keeps that reason) and investment_advice (share
+  # price vs DCF value stays advice). A buyback price is in the filings, so a question that
+  # mentions a buyback is left alone; so is a question about what the report says.
+  # TO VERIFY (author): TCS annual reports do print a share-price table (corporate governance
+  # report); the fact database has no price data, which is what this reason means.
+  no_market_data:
+    - '^(?!.*\bbuy[\s-]*backs?\b)(?!.*\b(report|filings?)\s+(says?|said|mentions?|discloses?)\b).*\b(share|stock|market|closing|opening|trading) prices?\b'
+    - '^(?!.*\b(report|filings?)\s+(says?|said|mentions?|discloses?)\b).*\bmarket[\s-]*(cap|capitali[sz]ation)\b'
+    - '\b(tcs(''s|’s)?|its|the company(''s|’s)?) market value\b'
+    - '\bmarket value of (tcs|the company|the stock|its shares|the shares|tcs shares)\b'
+    - '\b(p/?e|p/?b|price[\s-]to[\s-](earnings|book)) (ratio|multiple)\b'
+    - '\bdividend yield\b'
+    - '\b(is|are|was|were) (tcs|the stock|the shares?|tcs shares) trading\b|\bprice is tcs trading\b'
+    - '\b52[\s-]week (high|low)\b'
+
+# U1: help / about questions get a fixed answer, written here, before the router (loop.py).
+# Not a refusal. Patterns match the WHOLE question (case-insensitive), so "what can you tell me
+# about TCS's dividends in FY25?" still goes to the router. Refusal patterns are checked first.
+about:
+  patterns:
+    - '^\W*(help|help me|menu)\W*$'
+    - '^\W*(can|could) you help( me)?\W*$'
+    - '^\W*what (can|could|do) you (do|tell me|answer|know|help( me)? with)( about (yourself|you|this (tool|assistant|app)|tcs))?\W*$'
+    - '^\W*what (kinds? of |sort of )?questions can (i|you) (ask|answer)( you)?\W*$'
+    - '^\W*(who|what) are you\W*$'
+    - '^\W*(what is|what''s) this( tool| assistant| app)?\W*$'
+    - '^\W*who (made|created|built|wrote|developed|designed) (you|this|this (tool|assistant|app))\W*$'
+    - '^\W*how (do|does) (you|this|this (tool|assistant|app)) work\W*$'
+    - '^\W*tell me about (yourself|this (tool|assistant|app))\W*$'
+  # The counts below are checked against the database by tests/test_u1_meta_answers.py.
+  # The five example questions must pass the pre-check (same test).
+  text: |
+    I'm a research assistant for TCS (Tata Consultancy Services), built by Aradhya Chandra as a portfolio project.
+
+    How I work: a small local language model reads your question and picks which lookups to run. Code then computes every number, from 178 verified facts taken from TCS's annual reports for FY24, FY25 and FY26 (covering FY23 to FY26; the FY23 figures are the comparatives printed in the FY24 report). Each figure comes with its source document and page.
+
+    Questions I can answer, for example:
+    - What was TCS's consolidated revenue from operations in FY26?
+    - What was TCS's net margin in FY25?
+    - What was TCS's basic earnings per share in FY24?
+    - What does the base-case DCF imply per share?
+    - How does TCS manage the risk of cyber attacks?
+
+    What I don't do: investment advice, price targets or share-price forecasts, market prices (share price, market capitalisation), other companies, or quarterly figures.
 
 # Answer verifier (M6, src/erp/agent/verifier.py). Deterministic checks of the composed text
 # against the tool results; any error means the code-written template answer is used instead.

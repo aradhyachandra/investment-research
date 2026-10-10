@@ -5,6 +5,7 @@ evidence_id that is listed in `citations`. Since M6 the verifier (verifier.py) c
 number written in `answer_text` is one of the tool numbers, and `numbers_used` is the list of
 tool numbers the text actually says. If the verifier finds an error, `answer_text` is the
 code-written template instead of the LLM's prose (`composed_by = "template"`).
+A help / about question gets a fixed text from config (`composed_by = "about"`, U1): not a refusal.
 """
 from typing import Literal
 
@@ -31,7 +32,7 @@ class Answer(BaseModel):
     limitations: list[str] = []      # unverified facts, failed lookups, failed DCF checks ...
     route: RoutePlan | None = None
     tool_results: list[ToolResult] = []
-    composed_by: Literal["llm", "template", "refusal"]
+    composed_by: Literal["llm", "template", "refusal", "about"]
     model: str | None = None         # runtime LLM name as Ollama reports it
     warnings: list[str] = []         # what the code had to correct in the LLM's output
     verification: VerifierReport | None = None   # the verifier's report on the LLM's text (M6)

@@ -301,6 +301,8 @@ def written_by(view: AnswerView) -> str:
         return (f"Written by the model ({view.model or 'unknown model'}) from tool results. The verifier checked "
                 "that its figures match the tool results; it does not check the wording or figures quoted from "
                 "passages." + (f" It raised {n} warning(s): see the verifier box." if n else ""))
+    if view.composed_by == "about":
+        return "A fixed answer from the app's config (no model, no tools, no figures)."
     if view.composed_by == "template":
         return ("Written by code from the tool results (code-built fallback): "
                 + ("the verifier rejected the model's text." if view.verification.issues

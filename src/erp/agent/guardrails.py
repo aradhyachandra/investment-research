@@ -40,11 +40,19 @@ def latest_period(conn: sqlite3.Connection, ticker: str) -> str | None:
 def precheck(question: str, patterns: dict[str, list[str]], other_companies: list[str],
              latest: str | None = None) -> str | None:
     """The refusal reason for a question, or None if it may go to the router."""
+    other = any(re.search(rf"\b{re.escape(name)}\b", question, re.I) for name in other_companies)
     for reason, regexes in patterns.items():
         if any(re.search(p, question, re.I) for p in regexes):
-            return reason
-    if any(re.search(rf"\b{re.escape(name)}\b", question, re.I) for name in other_companies):
+            # Another company's share price: the other-company reason is the more useful one.
+            return "other_company" if reason == "no_market_data" and other else reason
+    if other:
         return "other_company"
     if latest and any(period_key(p) > period_key(latest) for p in periods_in(question)):
         return "outside_data"
     return None
+
+
+def about_intent(question: str, patterns: list[str]) -> bool:
+    """U1: a help / about question ("what can you do?", "who made you?"). The patterns match the
+    whole question, so a real question that starts the same way still goes to the router."""
+    return any(re.search(p, question.strip(), re.I) for p in patterns)

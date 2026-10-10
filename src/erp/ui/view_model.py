@@ -447,6 +447,8 @@ def verification_view(a: Answer) -> VerificationView:
     fallback = a.composed_by == "template"
     if a.composed_by == "refusal":
         status = "Refused before an answer was written; the verifier did not run."
+    elif a.composed_by == "about":
+        status = "A fixed answer written in config about this assistant; no model or tool was used, so the verifier did not run."
     elif fallback and rep is not None and not rep.ok:
         status = ("The verifier rejected the model's text. The answer shown was written by code from the "
                   "tool results instead (code-built fallback).")
@@ -518,6 +520,8 @@ def answer_badge(view: AnswerView) -> tuple[str, str]:
     v = view.verification
     if view.refused or view.composed_by == "refusal":
         return "Refused by code", "gray"
+    if view.composed_by == "about":
+        return "About this assistant", "blue"
     if v.fallback_used:
         return "Code-built fallback answer", "orange"
     if v.report_ok is None:
