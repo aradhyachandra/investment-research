@@ -1,5 +1,70 @@
 # PROGRESS
 
+## 2026-10-10 — D4: history checks for the DCF assumptions
+
+**Done** (tests first: `tests/test_d4_history_checks.py`, 29 tests, written before the data, config and code)
+- `data/manual/financials_tcs.csv` (author asked for this edit): 24 new rows at the end, 4 metrics x
+  FY23-FY26: `interest_on_lease_liabilities`, `depreciation_right_of_use_assets` (lease note: FY26 AR
+  PDF 200, FY25 AR PDF 205/206, FY24 AR PDF 206) and `operating_profit_before_wc_changes`,
+  `cash_generated_from_operations` (cash flow statement: PDF 172 / 184 / 184). `entered_by = Claude`,
+  verification blank, PDF + printed page. Text layer checked against rendered page images. Metrics in
+  `config/metrics.yaml`, bands in `config/companies/tcs.yaml`. Loader with `--raw-dir`: 178 facts, 24
+  unverified, every comparative agrees (16 pairs), no band widened.
+- `src/erp/dcf/history.py` (new): for the `years` fiscal years ending with the valuation year
+  (FY23-FY26), computes each operating assumption on the DCF's own definition (lease-adjusted EBIT,
+  D&A excl. right-of-use, capex, effective tax, working capital / incremental revenue, revenue growth
+  + CAGR) from facts, reusing the ratio engine's operands; min / max / average; one non-blocking
+  pass/warn check per assumption per scenario; unmatched or missing definitions flagged; missing years
+  say why; never raises for missing data.
+- `config/dcf.yaml` `history`: window, definitions, `definition_match` (tax = approximate), tolerance
+  rule (default 0, TO VERIFY).
+- `run_dcf`: `DCFResult.history`; `dcf_run.outputs_json["history"]` (table, checks, fact ids and pages).
+  Engine checks, `checks_json` and `all_checks_passed` unchanged. Engine arithmetic untouched.
+- run_dcf tool: history in `detail`; one figure-free note per warned assumption.
+- UI DCF tab: "Assumptions vs history" table (assumption, value per scenario, FY23-FY26, range, status)
+  + expander with definitions, check details and page chips (`ui/dcf_view.py` HistoryTable,
+  `ui/app.py` show_history_table; `view_model._dcf_facts` includes history facts). Checked in the
+  browser (demo mode).
+- Existing tests updated where they pinned old lists: `test_d1_facts.manual_rows()` and
+  `test_d3_history.all_rows()` exclude the D4 metrics; `test_load_facts` metric count + 4.
+- Bug found by the suite and fixed: history raised `ConfigError` for a company with no config file
+  (the toy DCF); now treated as "no history".
+- README fact counts. Docs: `docs/D4_assumptions_vs_history.md`, `docs/D4_facts_for_review.md`,
+  `docs/M3_dcf_engine.md` section 9, NOTES.md (D4; DCF checks TODO list).
+- `data/db/sample.sqlite` rebuilt (old copy in the session scratchpad).
+
+**Result check (no change)**: base 1914.8185156593645, bear 1445.112168857655, bull
+2351.6613052709554 INR per share, exact floats, pinned. `dcf_inputs.yaml` sha256 pinned. Eval not run.
+
+**What the checks show** (tolerance 0): base warns only on revenue growth (7% in years 2-3 vs a 6.85%
+best year); bear warns on growth, EBIT margin and tax; bull on growth and EBIT margin. D&A, capex and
+working capital sit inside the range in every scenario. Details in `docs/D4_assumptions_vs_history.md`.
+
+**Decisions**
+- History checks kept separate from the engine's checks (a departure from history is a judgement,
+  not a failed sanity check).
+- Working capital from two printed subtotals rather than nine "net change in" lines.
+- Tax compared with the effective rate but labelled an approximate match.
+- Window = `years` fiscal years ending with the valuation year (config), not hard-coded labels.
+- A single rate repeated across forecast years is checked as one value.
+
+**Known issues / flags for the author** (details in NOTES.md D4)
+- FY26 right-of-use depreciation footnote (113 to capital work-in-progress) and a 112 gap between the
+  FY26 depreciation notes and the P&L; affects the D&A assumption's definition, not a stored figure.
+- Tolerance 0 is a placeholder.
+- Eval: DCF answers gain limitation notes; EV-E04 (lease interest FY26) may now route to a fact.
+
+**What to review**: `docs/D4_facts_for_review.md` (24 rows, ~15 min, decisions first), the tolerance
+rule in `config/dcf.yaml`, the tax "approximate match" wording, then `docs/D4_assumptions_vs_history.md`.
+
+**Next**: author sign-off of the 24 rows; decide the tolerance; commit when told. Nothing committed.
+
+**How to run**
+```
+PYTHONPATH=src .venv/bin/python -m erp.db.load_facts --csv data/manual/financials_tcs.csv --entry-method llm_extracted --replace --raw-dir data/raw
+PYTHONPATH=src:tests .venv/bin/pytest -q tests/test_d4_history_checks.py
+```
+
 ## 2026-10-10 — D3: four years of history (FY23-FY26) from the FY25 and FY24 annual reports
 
 **Done** (tests first: `tests/test_d3_history.py`, 89 tests; written before the config, data and code)

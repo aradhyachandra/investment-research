@@ -103,8 +103,7 @@ stored. No market price is used anywhere, and nothing is called "cheap" or "expe
 ## 7. What is not done yet
 
 - The **golden test** (Python within 0.1% of your hand spreadsheet) waits for P0.3.
-- Checks that compare assumptions with history (margins, growth jumps) need more metrics in
-  SQLite. See NOTES.md.
+- ~~Checks that compare assumptions with history~~: done in D4 (section 9).
 
 ## 8. What now comes from where (D2, 2026-10-08)
 
@@ -136,3 +135,25 @@ The engine adds the facts, then the adjustments. Each fact used is stored in the
 its fact id and page, and the answer cites it. If a fact is missing, the run refuses and names it;
 there is no typed number to fall back on. If a fact has not been checked by a human, the run still
 works but says "This DCF uses N facts not yet verified by a human".
+
+## 9. Assumptions vs history (D4, 2026-10-10)
+
+Every run now also computes, from the facts database, TCS's own record for the fiscal years ending
+with the valuation year (FY23-FY26), using the DCF's own definitions (`config/dcf.yaml`, `history`):
+
+| Assumption | History measure |
+|---|---|
+| revenue_growth | year-on-year revenue growth; plus the compound growth over the window |
+| ebit_margin | (PBEIT - other income + finance costs - lease interest) / revenue (leases are an operating cost) |
+| tax_rate | effective rate, tax / PBT: an **approximate** match (the DCF uses a statutory rate on EBIT) |
+| da_pct_revenue | (D&A - right-of-use depreciation) / revenue |
+| capex_pct_revenue | (PP&E + intangibles purchased) / revenue |
+| nwc_pct_incremental_revenue | (operating profit before WC changes - cash generated from operations) / increase in revenue |
+
+Each scenario value is checked against the historical min-max, widened by a tolerance from the
+config (0 for now, TO VERIFY): **pass** or **warn**. A warning never stops a run, never changes a
+value, and is stored apart from the engine checks (`outputs_json["history"]`, `DCFResult.history`),
+so `all_checks_passed` still covers only the engine's sanity checks. An assumption with no history
+definition is shown as "not matched" and warns. Missing years say why (FY23 growth needs FY22).
+
+The plain-language summary of what the checks show is `docs/D4_assumptions_vs_history.md`.

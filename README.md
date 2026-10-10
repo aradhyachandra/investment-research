@@ -93,13 +93,14 @@ in this repository: they live in a separate private data repository checked out 
 is the same file. The download URLs were not recorded (TO VERIFY; `url: null` in
 `config/companies/tcs.yaml`), so this README does not give links.
 
-**How facts were entered.** `data/manual/financials_tcs.csv` holds 154 facts for FY23-FY26 (28
-metrics from the income statement, balance sheet, cash flow statement and share capital note), each
+**How facts were entered.** `data/manual/financials_tcs.csv` holds 178 facts for FY23-FY26 (32
+metrics from the income statement, balance sheet, cash flow statement, share capital note and lease note), each
 with the PDF page and printed page. All were read from the annual reports by an AI assistant and
 are loaded with `entry_method = llm_extracted`. The 54 read from the FY26 annual report (FY26 and
 its FY25 comparatives) were verified by the author on 2026-10-07 and 2026-10-08. The 100 added in
 D3 from the FY25 and FY24 annual reports (FY25, FY24 and FY23) were verified by the author on
-2026-10-10. When two reports print the same figure, the report for that year is
+2026-10-10. The 24 added in D4 (lease interest, right-of-use depreciation and two cash-flow
+working-capital subtotals, FY23-FY26) are not yet verified. When two reports print the same figure, the report for that year is
 the primary source and the other is a cross-check; every pair agreed. FY23 comes only from the FY24
 report's comparatives. The fuller dataset the plan calls for (FY21 onwards, quarters, hand-keyed
 and double-checked) does not exist yet.
@@ -395,7 +396,7 @@ scripts/clean_clone_check.sh --worktree
 README.md  PROJECT_PLAN.md  PROGRESS.md  NOTES.md  CLAUDE.md / AGENTS.md (instructions for coding tools)
 config/            company, metrics, ratios, DCF, ingest, agent, eval and UI settings (no code)
 data/
-  manual/          financials_tcs.csv (154 facts FY23-FY26, AI-read; all verified by the author), dcf_inputs.yaml
+  manual/          financials_tcs.csv (178 facts FY23-FY26, AI-read; 154 verified by the author), dcf_inputs.yaml
   sample/          facts_sample.csv (the original 12 facts, verified by the author)
   raw/             private data repo checkout with the PDFs (gitignored)
   db/, chroma/     local SQLite database and vector index (gitignored, rebuilt by commands above)

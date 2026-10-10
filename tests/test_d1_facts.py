@@ -64,10 +64,17 @@ def _rows(path):
         return list(csv.DictReader(f))
 
 
+# D4 added these metrics (lease note, cash-flow working-capital subtotals), also from the FY26 report;
+# they are tested in tests/test_d4_history_checks.py.
+D4_METRICS = {"interest_on_lease_liabilities", "depreciation_right_of_use_assets",
+           "operating_profit_before_wc_changes", "cash_generated_from_operations"}
+
+
 def manual_rows():
-    """The D1 rows: everything read from the FY26 annual report. D3 added rows from the FY25 and
-    FY24 reports to the same file; those are tested in tests/test_d3_history.py."""
-    return [r for r in _rows(MANUAL_CSV) if r["source_doc"] == AR]
+    """The D1 rows: everything read from the FY26 annual report for the D1 metrics. D3 added rows from
+    the FY25 and FY24 reports to the same file (tests/test_d3_history.py); D4 added four metrics
+    (tests/test_d4_history_checks.py)."""
+    return [r for r in _rows(MANUAL_CSV) if r["source_doc"] == AR and r["metric_id"] not in D4_METRICS]
 
 
 def manual_row(metric_id, period):

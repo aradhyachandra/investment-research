@@ -475,6 +475,38 @@ def snapshot_tab(db_path: Path, ui_cfg: dict, agent_cfg: dict) -> None:
 
 # ---------- DCF tab ----------
 
+def show_history_table(h, names: dict) -> None:
+    """D4: each operating assumption beside TCS's own FY23-FY26 record, computed by code from facts."""
+    window = f"{h.periods[0]}-{h.periods[-1]}" if h.periods else "history"
+    st.markdown(f"**Assumptions vs history** (each scenario's value beside the same measure computed from "
+                f"the filings for {window}; a warning marks a departure from that record, not an error)")
+    if h.note:
+        st.caption(f":orange[{md_escape(h.note)}]")
+    if h.unverified_fact_ids:
+        n = len(h.unverified_fact_ids)
+        st.caption(f":orange[This history uses {n} {'fact' if n == 1 else 'facts'} not yet verified by a human: "
+                   f"{', '.join(h.unverified_fact_ids)}]")
+    table = []
+    for r in h.rows:
+        row = {"Assumption": r.label}
+        row.update({names.get(k, k): val for k, val in r.scenario_values.items()})
+        row.update(r.years)
+        row["Range (min to max)"] = r.range
+        row[f"Status ({' · '.join(names.get(k, k) for k in r.status)})"] = " · ".join(r.status.values())
+        table.append(row)
+    st.dataframe(pd.DataFrame(table), hide_index=True, width="stretch")
+    st.caption(md_escape(h.tolerance_rule))
+    with st.expander("How each row is computed, check details and source pages"):
+        for r in h.rows:
+            match = {"approximate": " :orange-badge[Approximate match]",
+                     "none": " :red-badge[Not matched to history]"}.get(r.definition_match, "")
+            st.markdown(f"**{md_escape(r.label)}**{match}  \n{md_escape(r.note)}")
+            for k, d in r.details.items():
+                st.markdown(f"- {md_escape(names.get(k, k))}: {r.status[k]} ({md_escape(d)})")
+            if r.chips:
+                st.markdown(" ".join(f":{chip_colour(c.badge)}-badge[{md_escape(c.source_title)}, "
+                                     f"{md_escape(c.page_text or 'no page')}]" for c in r.chips))
+
 @st.cache_data(show_spinner=False)
 def _dcf(db_path: str, db_mtime: float, assumptions: str, a_mtime: float, ui_cfg: dict, agent_cfg: dict) -> DCFTabView:
     conn = readonly_copy(db_path)       # run_dcf logs a dcf_run row: keep it off the file
@@ -540,6 +572,8 @@ def dcf_tab(db_path: Path, ui_cfg: dict, agent_cfg: dict) -> None:
     others = " and ".join(names.get(s, s) for s in ui_cfg["dcf"]["scenarios"] if s != ui_cfg["dcf"]["base"])
     st.caption(f"The {others} scenarios override some of these; see `data/manual/dcf_inputs.yaml` "
                "(where they are keyed bear / base / bull).")
+    if v.history:
+        show_history_table(v.history, names)
     with st.expander(f"Full calculation path ({md_escape(v.base_name)} scenario)"):
         show_dcf_tables(p)
 

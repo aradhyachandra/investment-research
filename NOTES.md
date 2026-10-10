@@ -2,6 +2,43 @@
 
 Open questions, TO VERIFY items, and validation TODOs. Newest first.
 
+## D4 assumptions vs history (2026-10-10)
+
+- TO VERIFY (author): 24 new rows (`docs/D4_facts_for_review.md`): interest on lease liabilities,
+  depreciation on right-of-use assets, operating profit before working capital changes, cash generated
+  from operations, FY23-FY26. 16 have an independent figure in another report (all agree); the 8 FY23
+  rows have none.
+- TO VERIFY: **tolerance rule** in `config/dcf.yaml` (`history.tolerance`, default 0 = strictly
+  inside the observed FY23-FY26 min-max). Placeholder chosen by Claude, not sourced. With 0, base
+  revenue growth warns because 7% exceeds 6.85% by 0.15 points.
+- TO VERIFY: **FY26 right-of-use depreciation.** The lease note's buildings line (part of the 1,866
+  total) carries a footnote: INR 113 crore of directly attributable costs went to capital
+  work-in-progress. The DCF's `da_pct_revenue` rationale and D4's history subtract the full 1,866 from
+  the P&L's 5,560. Also, in FY26 PP&E depreciation 2,641 + amortisation 941 + ROU 1,866 = 5,448, not
+  the P&L's 5,560 (gap 112); in FY25 the same sum ties exactly (2,695 + 727 + 1,820 = 5,242). Not
+  resolved; no stored figure depends on the answer, but the D&A assumption's definition might.
+- **Tax is an approximate match.** History = effective rate (tax expense / PBT, after exceptional
+  items). The DCF applies its rate to EBIT and the file describes the base rate as statutory. The row
+  is labelled approximate; the check still compares with the effective-rate range.
+- **Working capital** uses two printed cash-flow subtotals (OPBWC - cash generated from operations),
+  the same basis as the YAML's FY26 "about 2,210" figure. That movement includes every "Net change in"
+  line (incl. loans and other financial assets, other financial liabilities), not only receivables and
+  payables. Very volatile as a share of a small revenue increase (FY24 44.6%, FY26 18.9%).
+- History checks are **not** in `checks` / `checks_json` and do not affect `all_checks_passed`; they
+  are in `DCFResult.history` and `outputs_json["history"]`. Decision: a departure from history is a
+  judgement to read, not a failed sanity check.
+- A single-rate assumption is repeated per forecast year by the loader; the check collapses equal
+  values to one.
+- **Eval effects (eval not run):**
+  - DCF tool output: notes gain one line per warned assumption (base: 1; bear: 3; bull: 2). Notes
+    become Answer limitations. No figures in them. DCF answers' limitations and composer prompt change.
+  - `EV-E04` (dev, "How much interest on lease liabilities did TCS report in FY26?") was a search
+    question; there is now a fact `interest_on_lease_liabilities` the router can pick, which may change
+    its route and citations (the figure, 778, is the same page).
+  - The router's metric list grows by four.
+- `data/db/sample.sqlite` rebuilt with the new rows (178 facts, 24 unverified); old copy in the
+  session scratchpad.
+
 ## D3 four years of history (2026-10-10)
 
 - TO VERIFY (author): the 100 new rows from the FY25 and FY24 annual reports
@@ -448,8 +485,8 @@ Done in M3 (`src/erp/dcf/checks.py`, stored in `dcf_run.checks_json`):
 - every assumption has a non-empty rationale and source (loader refuses otherwise)
 
 TODO (need historical facts in SQLite; today only 5 metrics are loaded):
-- [ ] Historical growth, margins, tax rate, D&A %, capex %, NWC changes shown beside assumptions
-- [ ] Margin / growth jumps vs history flagged
+- [x] Historical growth, margins, tax rate, D&A %, capex %, NWC changes shown beside assumptions (D4)
+- [x] Assumptions outside the FY23-FY26 range flagged (D4; non-blocking pass/warn, tolerance TO VERIFY)
 - [ ] Historical FCFF
 - [x] Bridge items (cash, investments, leases, minorities, shares) and base-year revenue taken
       from the balance-sheet / P&L facts, with fact_ids, instead of the YAML (D2). Debt still typed

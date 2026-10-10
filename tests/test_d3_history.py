@@ -62,6 +62,7 @@ from erp.ingest.pdf_to_chunks import _footer_numbers, _page_numbers, parse_page_
 from erp.tools.facts import FactNotFoundError, get_financial_fact
 from erp.tools.ratios import RATIOS_CONFIG, RatioError, compute_ratio, load_ratios
 from test_agent_tools import DISPLAY
+from test_d1_facts import D4_METRICS
 from test_dcf_run import TOY_YAML
 
 MANUAL_CSV = REPO / "data" / "manual" / "financials_tcs.csv"
@@ -110,8 +111,10 @@ FY26_ONLY_LINES = {"exceptional_restructuring_expenses", "exceptional_labour_cod
 
 
 def all_rows():
+    """The rows D3 was written for: the whole CSV except the four metrics D4 added (tested in
+    tests/test_d4_history_checks.py, which also loads the whole file)."""
     with open(MANUAL_CSV, newline="") as f:
-        return list(csv.DictReader(f))
+        return [r for r in csv.DictReader(f) if r["metric_id"] not in D4_METRICS]
 
 
 def rows_from(doc):

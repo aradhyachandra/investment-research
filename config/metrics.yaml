@@ -302,7 +302,56 @@ metrics:
       average used for EPS (in FY26 and FY25 the two are equal: note 8(m) shows no change in
       the number of shares during either year).
 
+  # D4: lease note figures, for the DCF's lease-adjusted EBIT and D&A (leases treated as an operating
+  # cost). Read from the lease note of each annual report.
+  interest_on_lease_liabilities:
+    display_name: Interest on lease liabilities
+    statement: other
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    definition: >-
+      "Interest on lease liabilities" for the year, as stated in the lease note (one sentence:
+      "Interest on lease liabilities is ... crore ... for the years ended ..."). Part of "Finance
+      costs" on the Statement of Profit and Loss.
+
+  depreciation_right_of_use_assets:
+    display_name: Depreciation on right-of-use assets
+    statement: other
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    definition: >-
+      Total of the lease note's table "Depreciation on right-of-use assets is as follows" (all asset
+      classes). Part of "Depreciation and amortisation expense". The FY26 report notes that INR 113
+      crore of the FY26 buildings figure (directly attributable costs) was transferred to capital
+      work-in-progress; the total is stored as printed (TO VERIFY how much of it reached the
+      Statement of Profit and Loss).
+
   # Statement of Cash Flows
+  operating_profit_before_wc_changes:
+    display_name: Operating profit before working capital changes
+    statement: cash_flow
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    definition: >-
+      "Operating profit before working capital changes" as reported on the Statement of Cash Flows
+      (indirect method): profit for the year adjusted for non-cash and non-operating items, before
+      the "Net change in" working-capital lines.
+
+  cash_generated_from_operations:
+    display_name: Cash generated from operations
+    statement: cash_flow
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    definition: >-
+      "Cash flows generated from operations" (FY26 and FY25 reports) / "Cash generated from operations" (FY24
+      report) on the Statement of Cash Flows: operating profit before working capital changes plus
+      the net change in working-capital lines, before taxes paid. So operating profit before
+      working capital changes minus this figure is the cash absorbed by working capital.
+
   cash_from_operations:
     display_name: Net cash from operating activities
     statement: cash_flow

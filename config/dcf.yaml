@@ -14,3 +14,99 @@ sensitivity:
   # (decimals: 0.01 = one percentage point). Cells where growth >= WACC are left blank.
   wacc_offsets: [-0.01, -0.005, 0.0, 0.005, 0.01]
   terminal_growth_offsets: [-0.01, -0.005, 0.0, 0.005, 0.01]
+
+# D4: the DCF's operating assumptions beside the company's own record (dcf/history.py).
+# Each entry computes, from facts in the database, the same quantity the DCF assumption stands for,
+# for each of the `years` fiscal years ending with the valuation year (FY23-FY26 for a FY26
+# valuation). Values are decimals, like the assumptions file. Operands use the ratio engine's forms
+# (a metric_id or {sum: [{metric, sign}, ...]}); `{change: metric}` = metric this year - metric one
+# fiscal year earlier.
+#   kind: yoy_growth  (metric[t] - metric[t-1]) / metric[t-1]; `cagr: true` also shows the compound
+#                     annual growth from the first to the last year of the window
+#   kind: quotient    numerator / denominator, same year
+#   definition_match: same | approximate | none  (none = no history definition; the check warns)
+history:
+  years: 4
+  # Check rule (non-blocking; a warning never stops a run): an assumption PASSES if every scenario
+  # value (each forecast year, for a list) lies within the historical min-max widened by the
+  # tolerance on each side; otherwise it WARNS. Tolerances are decimals (0.005 = half a percentage
+  # point). TO VERIFY with the finance partner: 0 (strictly inside the observed range) is a
+  # placeholder chosen by Claude, not a sourced rule. Four years is a short record; a warning means
+  # "a departure from what TCS has done in these years", not "wrong".
+  tolerance:
+    default: 0.0
+    by_assumption: {}
+  assumptions:
+    revenue_growth:
+      label: Revenue growth
+      kind: yoy_growth
+      metric: revenue_from_operations
+      cagr: true
+      definition_match: same
+      definition: >-
+        Year-on-year change in revenue from operations, reported rupees (as the DCF grows base-year
+        revenue from operations).
+    ebit_margin:
+      label: EBIT margin (lease-adjusted)
+      kind: quotient
+      numerator:
+        sum:
+          - {metric: profit_before_exceptional_items_and_tax, sign: 1}
+          - {metric: other_income, sign: -1}
+          - {metric: finance_costs, sign: 1}
+          - {metric: interest_on_lease_liabilities, sign: -1}
+      denominator: revenue_from_operations
+      definition_match: same
+      definition: >-
+        (Profit before exceptional items and tax - other income + finance costs - interest on lease
+        liabilities) / revenue from operations. Leases are an operating cost in the DCF, so lease
+        interest stays a cost; other income and exceptional items are left out, as in the DCF.
+    tax_rate:
+      label: Tax rate
+      kind: quotient
+      numerator: tax_expense
+      denominator: profit_before_tax
+      definition_match: approximate
+      match_note: >-
+        History is the effective rate (tax expense / profit before tax, after exceptional items, incl.
+        prior-year items and deferred tax). The DCF applies its rate to EBIT; the assumptions file
+        describes the base rate as the Indian statutory rate. Not the same definition.
+      definition: >-
+        Effective tax rate: total tax expense / profit before tax.
+    da_pct_revenue:
+      label: D&A excl. right-of-use depreciation, % of revenue
+      kind: quotient
+      numerator:
+        sum:
+          - {metric: depreciation_amortisation, sign: 1}
+          - {metric: depreciation_right_of_use_assets, sign: -1}
+      denominator: revenue_from_operations
+      definition_match: same
+      definition: >-
+        (Depreciation and amortisation - depreciation on right-of-use assets) / revenue from operations.
+        Right-of-use depreciation is left out because the lease cost stays inside EBIT.
+    capex_pct_revenue:
+      label: Capex, % of revenue
+      kind: quotient
+      numerator:
+        sum:
+          - {metric: purchase_of_ppe, sign: 1}
+          - {metric: purchase_of_intangibles, sign: 1}
+      denominator: revenue_from_operations
+      definition_match: same
+      definition: >-
+        (Payment for purchase of PP&E + payment for purchase of intangible assets) / revenue from
+        operations. Excludes payments for right-of-use assets.
+    nwc_pct_incremental_revenue:
+      label: Working capital, % of incremental revenue
+      kind: quotient
+      numerator:
+        sum:
+          - {metric: operating_profit_before_wc_changes, sign: 1}
+          - {metric: cash_generated_from_operations, sign: -1}
+      denominator: {change: revenue_from_operations}
+      definition_match: same
+      definition: >-
+        Cash absorbed by working capital (operating profit before working capital changes - cash
+        generated from operations, from the cash flow statement) / increase in revenue from operations.
+        Very sensitive when revenue barely grows.

@@ -156,6 +156,11 @@ plausibility_bands:
   cash_from_operations:    {min: 15000,  max: 150000}
   purchase_of_ppe:         {min: 500,    max: 15000}
   purchase_of_intangibles: {min: 0,      max: 5000}
+  # D4 additions (lease note and the cash flow statement's working-capital subtotals)
+  interest_on_lease_liabilities:    {min: 100,   max: 3000}
+  depreciation_right_of_use_assets: {min: 500,   max: 6000}
+  operating_profit_before_wc_changes: {min: 25000, max: 180000}
+  cash_generated_from_operations:   {min: 20000, max: 180000}
 
 # How finely each reported unit is printed in TCS documents, in that unit. Two figures for the
 # same fact (after converting to the canonical unit) "agree" if they differ by no more than

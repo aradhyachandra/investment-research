@@ -93,7 +93,7 @@ def test_metrics_seeded_from_config(conn):
         "revenue_from_operations", "profit_after_tax", "profit_attributable_to_owners",
         "eps_basic", "total_equity", "cash_and_equivalents",
     } <= ids
-    assert len(ids) == 6 + 21 + 1  # D1 added 21 metrics (tests/test_d1_facts.py NEW_METRICS); D3 one
+    assert len(ids) == 6 + 21 + 1 + 4  # D1 added 21 metrics (tests/test_d1_facts.py NEW_METRICS); D3 one; D4 four
     defs = dict(conn.execute("SELECT metric_id, definition FROM metric"))
     assert "profit for the year, including non-controlling interests" in defs["profit_after_tax"]
     owners = " ".join(defs["profit_attributable_to_owners"].split()).lower()

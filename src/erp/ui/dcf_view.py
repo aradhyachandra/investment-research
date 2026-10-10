@@ -8,14 +8,19 @@ label is formatted by tools.format_number. Two things here are display geometry,
     (tested).
 Which scenarios are shown is config (config/ui.yaml `dcf`); the scenarios themselves live in the
 author's assumptions file.
+
+D4: "Assumptions vs history" puts each operating assumption (value per scenario) beside the same quantity
+computed by dcf/history.py for FY23-FY26, with the range, each scenario's pass/warn status and page chips
+for the facts used. Every figure is from the run's own `history` record, formatted here.
 """
 from pathlib import Path
 
 import yaml
 from pydantic import BaseModel
 
-from erp.agent.tools import ToolCall, ToolEnv, format_number, run_tool
-from erp.ui.view_model import DCFPath, dcf_path
+from erp.agent.tools import ToolCall, ToolEnv, _fact_evidence, format_number, run_tool
+from erp.tools.facts import FactResult
+from erp.ui.view_model import CitationView, DCFPath, citation_view, dcf_path, load_ui_config
 
 
 class ScenarioBar(BaseModel):
@@ -51,6 +56,27 @@ class HeadlineFigure(BaseModel):
     display: str                      # engine output, formatted by tools.format_number
 
 
+class HistoryTableRow(BaseModel):
+    assumption: str                   # key, e.g. ebit_margin
+    label: str                        # e.g. "EBIT margin (lease-adjusted)"
+    scenario_values: dict[str, str]   # scenario key -> value(s) as used, e.g. "24.70%"
+    years: dict[str, str]             # period -> history value, or "n/a"
+    range: str                        # "min to max (average x)"
+    status: dict[str, str]            # scenario key -> pass / warn
+    details: dict[str, str]           # scenario key -> the check's detail
+    note: str                         # definition, match note, CAGR, why a year is n/a
+    definition_match: str             # same / approximate / none
+    chips: list[CitationView]         # one per page the facts came from
+
+
+class HistoryTable(BaseModel):
+    periods: list[str]
+    rows: list[HistoryTableRow]
+    tolerance_rule: str
+    unverified_fact_ids: list[str]
+    note: str | None = None
+
+
 class DCFTabView(BaseModel):
     scenarios: list[ScenarioBar]
     base_name: str = ""               # display name of the base scenario
@@ -61,6 +87,7 @@ class DCFTabView(BaseModel):
     waterfall: list[WaterfallStep]
     per_share_unit: str | None
     errors: list[str]
+    history: HistoryTable | None = None   # D4: assumptions vs FY23-FY26 record
 
 
 def scenario_names(assumptions_file, preferred: list[str]) -> list[str]:
@@ -115,10 +142,56 @@ def headline_figures(detail: dict, display: dict) -> list[HeadlineFigure]:
             HeadlineFigure(label="WACC", display=format_number(v["wacc"] * 100, "PERCENT", display))]
 
 
+def _pct(x: float, display: dict) -> str:
+    return format_number(x * 100, "PERCENT", display)
+
+
+def _chips(facts: list[dict], ui_cfg: dict) -> list[CitationView]:
+    """One page chip per document page the facts came from."""
+    out = {}
+    for f in facts:
+        e = _fact_evidence(FactResult.model_validate(f))
+        c = citation_view(e, {f["source_id"]: f["source_doc_type"]}, {}, ui_cfg,
+                          {e.evidence_id: f["reported_value"]})
+        out.setdefault((c.source_title, c.page_text), c)
+    return list(out.values())
+
+
+def history_table(details: dict[str, dict], display: dict, ui_cfg: dict) -> HistoryTable | None:
+    """Rows from the runs' `history` records (one run per scenario; the history itself is the same in each)."""
+    runs = {k: d["history"] for k, d in details.items() if d.get("history")}
+    if not runs:
+        return None
+    first = next(iter(runs.values()))
+    periods = first["periods"]
+    rows = []
+    for row in first["rows"]:
+        name = row["assumption"]
+        checks = {k: next(c for c in h["checks"] if c["assumption"] == name) for k, h in runs.items()}
+        years = {y["period"]: _pct(y["value"], display) if y["value"] is not None else "n/a" for y in row["years"]}
+        rng = (f"{_pct(row['min'], display)} to {_pct(row['max'], display)} (average {_pct(row['average'], display)})"
+               if row["min"] is not None else "n/a")
+        note = [row["definition"]] if row["definition"] else []
+        if row.get("match_note"):
+            note.append(row["match_note"])
+        if row.get("cagr") and row["cagr"]["value"] is not None:
+            note.append(f"Compound annual growth {row['cagr']['period']}: {_pct(row['cagr']['value'], display)}.")
+        missing = {y["missing"] for y in row["years"] if y["value"] is None and y.get("missing")}
+        note += [f"n/a: {m}" for m in sorted(missing)]
+        rows.append(HistoryTableRow(
+            assumption=name, label=row["label"],
+            scenario_values={k: ", ".join(_pct(v, display) for v in c["values"]) for k, c in checks.items()},
+            years=years, range=rng, status={k: c["status"] for k, c in checks.items()},
+            details={k: c["detail"] for k, c in checks.items()}, note=" ".join(note),
+            definition_match=row["definition_match"], chips=_chips(row["facts"], ui_cfg)))
+    return HistoryTable(periods=periods, rows=rows, tolerance_rule=first["tolerance_rule"],
+                        unverified_fact_ids=first["unverified_fact_ids"], note=first.get("note"))
+
+
 def build_dcf_tab(env: ToolEnv, scenarios: list[str], *, base: str, assumptions_file, footer: str,
                   labels: dict | None = None) -> DCFTabView:
     labels = labels or {}
-    errors, bars, base_result = [], [], None
+    errors, bars, base_result, details = [], [], None, {}
     if not Path(assumptions_file).is_file():
         errors.append(f"DCF assumptions file {Path(assumptions_file).name} not found, so no DCF can be shown.")
     else:
@@ -128,6 +201,7 @@ def build_dcf_tab(env: ToolEnv, scenarios: list[str], *, base: str, assumptions_
                 errors.append(f"Scenario '{name}': {r.error}")
                 continue
             d = r.detail
+            details[name] = d
             per_share = next(n for n in r.numbers if n.number_id.endswith("#value_per_share"))
             bars.append(ScenarioBar(scenario=name, name=labels.get(name, name), label=d["description"], value=per_share.value,
                                     display=per_share.display, run_id=d["run_id"]))
@@ -142,4 +216,5 @@ def build_dcf_tab(env: ToolEnv, scenarios: list[str], *, base: str, assumptions_
     return DCFTabView(scenarios=bars, base_name=labels.get(base, base), headline=headline_figures(d, env.display),
                       base=dcf_path(base_result, env.display, assumptions_file, footer),
                       base_detail=d, heatmap=heatmap_cells(d, env.display), waterfall=waterfall_steps(d, env.display),
-                      per_share_unit=d["per_share_unit"], errors=errors)
+                      per_share_unit=d["per_share_unit"], errors=errors,
+                      history=history_table(details, env.display, load_ui_config()))

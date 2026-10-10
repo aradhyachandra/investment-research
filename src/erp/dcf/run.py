@@ -11,6 +11,10 @@ Inputs the assumptions file marks `from_db` (base-year revenue and bridge items,
 from the facts database by dcf/db_inputs.py before anything is computed: their fact ids and pages
 go into the dcf_run row and the result, and a missing fact makes the run refuse. Judgement
 adjustments to those figures stay in the YAML, each with a rationale and source.
+
+D4: every run also carries the operating assumptions beside the company's own record (dcf/history.py),
+with a non-blocking pass/warn check per assumption. Those checks are kept apart from the engine's
+`checks` (and from `all_checks_passed`); they never stop a run and never change a value.
 """
 import json
 import sqlite3
@@ -22,6 +26,7 @@ from pydantic import BaseModel
 
 from erp.config import REPO
 from erp.dcf.assumptions import Assumption, AssumptionError, load_scenario
+from erp.dcf.history import DCFHistory, history_for, load_history_config
 from erp.dcf.db_inputs import DBInput, resolve_db_inputs, unverified_fact_ids, unverified_note
 from erp.dcf.checks import (
     CheckResult,
@@ -74,7 +79,8 @@ class DCFResult(BaseModel):
     valuation: ValuationResult
     sensitivity: SensitivityGrid
     checks: list[CheckResult]
-    all_checks_passed: bool
+    all_checks_passed: bool              # the engine's checks only (history checks are in `history`)
+    history: DCFHistory                  # D4: operating assumptions vs FY23-FY26 record, non-blocking checks
     code_version: str
     run_at: str
     disclaimer: str
@@ -143,6 +149,8 @@ def run_dcf(conn: sqlite3.Connection, ticker: str, scenario: str, *, assumptions
     grid = sensitivity_grid(fcff, [round(w.wacc + o, 10) for o in sens["wacc_offsets"]],
                             [round(g + o, 10) for o in sens["terminal_growth_offsets"]], bridge, **scale)
 
+    history = history_for(conn, ticker, s, load_history_config(dcf_config))   # never raises for missing data
+
     version = code_version()
     run_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     assumptions_json = json.dumps({
@@ -159,6 +167,7 @@ def run_dcf(conn: sqlite3.Connection, ticker: str, scenario: str, *, assumptions
         "wacc_build": w.model_dump(),
         "valuation": valuation.model_dump(),
         "sensitivity": grid.model_dump(),
+        "history": history.model_dump(mode="json"),
     })
     checks_json = json.dumps([c.model_dump() for c in checks])
     valuation_date = v("valuation_date")
@@ -172,6 +181,6 @@ def run_dcf(conn: sqlite3.Connection, ticker: str, scenario: str, *, assumptions
         run_id=cur.lastrowid, ticker=ticker, scenario=scenario, description=s.description, label=s.label,
         valuation_date=valuation_date, units=s.units, per_share_unit="INR_PER_SHARE",
         assumptions=assumptions, db_inputs=db_inputs, unverified_fact_ids=unverified, notes=notes, fcff_build=years, wacc_build=w, valuation=valuation, sensitivity=grid,
-        checks=checks, all_checks_passed=all(c.status == "pass" for c in checks), code_version=version,
+        checks=checks, all_checks_passed=all(c.status == "pass" for c in checks), history=history, code_version=version,
         run_at=run_at, disclaimer=DISCLAIMER,
     )

@@ -300,6 +300,12 @@ def _dcf_tool(a: DCFArgs, env: ToolEnv) -> ToolResult:
                                      "value_per_share", True, {"wacc": w * 100, "terminal_growth": gr * 100}))
     notes = [d.disclaimer, f"Scenario label: {d.label}.", *d.notes]
     notes += [f"Check {c.check_id}: {c.status} ({c.detail})" for c in d.checks if c.status != "pass"]
+    # D4: the history table is in `detail["history"]`. Departures are noted without figures, so the
+    # composer has nothing to quote that is not a tool number.
+    notes += [f"History check {c.assumption}: the assumption sits outside {d.ticker}'s own record for "
+              f"{d.history.periods[0]}-{d.history.periods[-1]}" if c.values and c.outside else
+              f"History check {c.assumption}: not compared with {d.ticker}'s own record ({c.detail.split(';')[0]})"
+              for c in d.history.checks if c.status != "pass"]
     return ToolResult(tool="run_dcf", args=a.model_dump(), ok=True, numbers=numbers, evidence=[ev, *fact_evs],
                       notes=notes,
                       detail=d.model_dump(mode="json"))

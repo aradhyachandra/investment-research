@@ -197,8 +197,10 @@ def source_badge(doc_type: str | None, ui_cfg: dict) -> tuple[str, str | None]:
 
 
 def _dcf_facts(detail: dict) -> list[dict]:
-    """Facts a DCF run read from the database (none for runs saved before D2)."""
-    return [f for i in detail.get("db_inputs") or [] for f in i.get("facts", [])]
+    """Facts a DCF run read from the database (none for runs saved before D2), and (D4) the facts its
+    history table was computed from (none for runs saved before D4)."""
+    return ([f for i in detail.get("db_inputs") or [] for f in i.get("facts", [])]
+            + [f for r in (detail.get("history") or {}).get("rows", []) for f in r.get("facts", [])])
 
 
 def doc_types(results: list[ToolResult]) -> dict[int, str]:
