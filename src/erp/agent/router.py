@@ -16,8 +16,14 @@ Search year (R1, R2), decided by code from the question text, never by the model
 exactly one fiscal year with data (FY24, FY 2024, 2023-24, fiscal 2024) filters search_documents to
 that year; a question naming no period lets search prefer the latest report; anything else (two or
 more periods, a quarter, a year with no data) gets neither.
+
+Named metric (E2), decided by code: when the question uses exactly one metric's own name (its
+display name, or the opening phrase of its definition) and the model's plan is plain fact lookups
+that use none of it, the lookups are replaced by that metric. Seen live (PDEV-07): "profit for the
+year, including non-controlling interests" -> profit_attributable_to_owners + non_controlling_interests.
 """
 import json
+import re
 import sqlite3
 from pathlib import Path
 from typing import Literal
@@ -26,7 +32,7 @@ import yaml
 from pydantic import BaseModel
 
 from erp.agent.tools import ARGS_MODELS, TOOL_NAMES, ToolCall
-from erp.agent.verifier import periods_in
+from erp.agent.verifier import period_spans, periods_in
 from erp.ingest.pdf_to_chunks import load_ingest_config
 from erp.periods import resolve_period
 from erp.tools.ratios import load_ratios
@@ -49,6 +55,7 @@ class Catalog(BaseModel):
     company_name: str
     ticker: str
     metrics: dict[str, str]          # metric_id -> display name
+    metric_definitions: dict[str, str] = {}   # metric_id -> definition (for names; not in the prompt)
     ratios: dict[str, str]           # ratio_id -> display name
     periods: list[str]               # labels with data in the database
     scenarios: list[str]             # DCF scenario names in the assumptions file ([] if none)
@@ -72,7 +79,8 @@ def build_catalog(conn: sqlite3.Connection, ticker: str, dcf_assumptions: Path) 
                            (ticker,)).fetchone()
     if company is None:
         raise RoutingError(f"unknown company ticker {ticker!r}")
-    metrics = dict(conn.execute("SELECT metric_id, display_name FROM metric ORDER BY metric_id").fetchall())
+    rows = conn.execute("SELECT metric_id, display_name, definition FROM metric ORDER BY metric_id").fetchall()
+    metrics = {m: name for m, name, _ in rows}
     periods = [r[0] for r in conn.execute(
         "SELECT DISTINCT p.label FROM period p JOIN fact f USING (period_id) WHERE p.company_id = ?"
         " ORDER BY p.end_date, p.label", (company[0],))]
@@ -81,6 +89,7 @@ def build_catalog(conn: sqlite3.Connection, ticker: str, dcf_assumptions: Path) 
         with open(dcf_assumptions) as f:
             scenarios = list((yaml.safe_load(f) or {}).get("scenarios") or {})
     return Catalog(company_name=company[1], ticker=ticker, metrics=metrics,
+                   metric_definitions={m: d for m, _, d in rows},
                    ratios={k: r["display_name"] for k, r in load_ratios().items()}, periods=periods,
                    scenarios=scenarios, doc_types=load_ingest_config()["indexable_doc_types"],
                    fiscal_year_end_month=company[2])
@@ -245,6 +254,76 @@ def set_search_year(calls: list[ToolCall], question: str, catalog: Catalog) -> N
             c.args["prefer_latest"] = False
 
 
+def _words(text: str) -> str:
+    """Lower case, letters and digits only, single spaces (so "non-controlling" == "non controlling")."""
+    return " ".join(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+def _definition_opening(definition: str) -> str:
+    """A definition's first phrase: the quoted line name it starts with ('"Total equity" as reported
+    ...'), or the text before the first colon, semicolon, bracket, quote or full stop."""
+    d = definition.strip()
+    if d.startswith('"'):
+        return d[1:].split('"', 1)[0]
+    return re.split(r'[:;("]|\.\s', d, maxsplit=1)[0]
+
+
+def metric_names(catalog: Catalog) -> dict[str, set[str]]:
+    """Each metric's own names, in _words form: its display name without any bracketed qualifier
+    ("Investments (current)" -> "investments"), and the opening phrase of its definition. A name of
+    one word ("investments", "equity") is too loose and is dropped."""
+    out = {}
+    for m, display in catalog.metrics.items():
+        candidates = [re.sub(r"\([^)]*\)", " ", display), _definition_opening(catalog.metric_definitions.get(m, ""))]
+        out[m] = {w for w in map(_words, candidates) if len(w.split()) >= 2}
+    return out
+
+
+def metrics_named_in(question: str, catalog: Catalog) -> set[str]:
+    """Metrics whose own name appears in the question as whole words. Period mentions (with an "in",
+    "for" or "during" before them) are blanked first, so "profit for the year in FY26, including
+    non-controlling interests" still reads as one name. A name inside a longer matched name does not
+    count ("non-controlling interests" inside "profit for the year, including non-controlling interests")."""
+    text = question
+    for start, end in reversed(period_spans(question)):
+        head = re.sub(r"\b(?:in|for|during)\s*$", "", text[:start], flags=re.I)
+        text = head + " " + text[end:]
+    text = f" {_words(text)} "
+    found = []                                         # (start, end, metric)
+    for m, names in metric_names(catalog).items():
+        for name in names:
+            for hit in re.finditer(re.escape(f" {name} "), text):
+                found.append((hit.start(), hit.end(), m))
+    return {m for s, e, m in found
+            if not any(s2 <= s and e <= e2 and (e2 - s2) > (e - s) for s2, e2, _ in found)}
+
+
+def _use_named_metric(calls: list[ToolCall], qtype: str, question: str, catalog: Catalog,
+                      problems: list[str]) -> list[ToolCall]:
+    """E2, decided by code: when the question names exactly one metric and the plan is a plain lookup
+    (question_type numeric, only fact calls), none of them for that metric, replace them with that
+    metric (one call per period, in order, keeping each period's basis). Anything else is left to the
+    model: two metrics named, a plan with a ratio or a search, a "mixed" or other question type (a
+    "why" question may fetch related lines on purpose), or the named metric already fetched."""
+    if qtype != "numeric" or not calls or any(c.tool != "get_financial_fact" for c in calls):
+        return calls
+    named = metrics_named_in(question, catalog)
+    if len(named) != 1:
+        return calls
+    (metric,) = named
+    if any(c.args.get("metric_id") == metric for c in calls):
+        return calls
+    out, seen = [], set()
+    for c in calls:
+        if c.args.get("period") in seen:
+            continue
+        seen.add(c.args.get("period"))
+        out.append(ToolCall(tool=c.tool, args={**c.args, "metric_id": metric}))
+    problems.append(f"router chose {', '.join(dict.fromkeys(c.args.get('metric_id') for c in calls))}; "
+                    f"the question names {metric} ({catalog.metrics[metric]}), so code fetched that instead")
+    return out
+
+
 # Tools whose period must have data in the database (explain_period needs none).
 _DATA_TOOLS = ("get_financial_fact", "compute_ratio")
 # Refusals that contradict a not_listed call: that call asks for a reported figure, which is never
@@ -306,7 +385,7 @@ def route(question: str, catalog: Catalog, llm_fn, *, max_calls: int) -> RoutePl
         if c.get("tool") == "get_financial_fact" and c.get("metric_id") == NOT_LISTED:
             items[i] = {"tool": "search_documents", "query": c.get("query") or question}
             problems.append(f"router chose metric_id {NOT_LISTED}; the filings are searched instead")
-    calls = [_to_call(c) for c in items]
+    calls = _use_named_metric([_to_call(c) for c in items], qtype, question, catalog, problems)
     set_search_year(calls, question, catalog)
     if not calls:
         return RoutePlan(**failed, problems=["router chose no tools and gave no refusal reason"])

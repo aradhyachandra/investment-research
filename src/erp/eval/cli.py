@@ -1,10 +1,13 @@
-"""run_eval: run the systems on one split of eval/questions.jsonl, score them, save everything.
+"""run_eval: run the systems on one split of a question file, score them, save everything.
 
   dev (default)  unlimited runs, results in eval/results/dev/<timestamp>_<sha>/
   --test         the frozen test split: needs the typed confirmation phrase (config/eval.yaml),
                  always runs all systems in one go, writes to eval/results/test/<...>/, and refuses
                  to run again once a test run exists, unless --force (and the phrase again).
                  Do not tune prompts or code on test results.
+  --questions F  another question file (default eval/questions.jsonl, v1). Its results go to
+                 eval/results/<label>/dev and .../test (questions_v1_1.jsonl -> v1_1), and the
+                 one-time test gate applies to each file separately.
   --rescore DIR  re-score saved answers (no LLM, no tools), e.g. after the gold file is corrected.
 
 Each run folder holds: run.json (timestamp, git SHA, model, split, file hashes, status),
@@ -30,7 +33,7 @@ from erp.config import REPO
 from erp.eval.baseline import naive_rag_answer
 from erp.eval.claims import extract_claims
 from erp.eval.metrics import render_report, summarize
-from erp.eval.questions import QUESTIONS_PATH, EvalQuestion, load_questions
+from erp.eval.questions import QUESTIONS_PATH, EvalQuestion, load_questions, question_set
 from erp.eval.score import QuestionScore, load_eval_config, score_question
 from erp.ingest.embed import EmbeddingError
 from erp.version import code_version
@@ -126,6 +129,8 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--force", action="store_true", help="with --test: run again although a test run exists")
     p.add_argument("--systems", nargs="+", choices=SYSTEMS, help="dev only: which systems (default: all)")
     p.add_argument("--ids", nargs="+", help="dev only: just these question ids")
+    p.add_argument("--questions", type=Path, default=None,
+                   help="question file (default eval/questions.jsonl); results go to eval/results/<label>/")
     p.add_argument("--rescore", type=Path, help="re-score a saved run folder (no LLM calls)")
     p.add_argument("--db", default=str(REPO / "data" / "db" / "sample.sqlite"))
     p.add_argument("--dcf-assumptions", default=None, help="path relative to the repo (default from config)")
@@ -140,8 +145,19 @@ def main(argv=None, *, input_fn=input, make_env=None, llm_fn=None, results_root:
     cfg, ecfg = load_agent_config(), load_eval_config()
     root = Path(results_root or REPO / ecfg["results_dir"])
     if args.rescore:
-        return rescore(args.rescore, ecfg, cfg, questions_path)
+        # The question file recorded in the run, unless --questions names another (e.g. a corrected copy).
+        return rescore(args.rescore, ecfg, cfg, args.questions)
 
+    default_qpath = Path(questions_path or QUESTIONS_PATH)
+    qpath = Path(args.questions or default_qpath)
+    if not qpath.is_file():
+        parser.error(f"question file not found: {qpath}")
+    try:
+        label, subdir = question_set(qpath, default=default_qpath)
+    except ValueError as e:
+        parser.error(str(e))
+    if subdir:
+        root = root / subdir
     split = "test" if args.test else "dev"
     if args.force and not args.test:
         parser.error("--force only applies to --test")
@@ -152,15 +168,14 @@ def main(argv=None, *, input_fn=input, make_env=None, llm_fn=None, results_root:
     if args.test:
         earlier = sorted(d.name for d in (root / "test").glob("*") if (d / "run.json").exists())
         if earlier and not args.force:
-            sys.exit(f"The test split has already been run ({', '.join(earlier)}). It runs once. "
+            sys.exit(f"The {label} test split has already been run ({', '.join(earlier)}). It runs once. "
                      "Use --force only for a reason you can defend (e.g. the first run crashed).")
         phrase = ecfg["test_confirmation_phrase"]
-        typed = input_fn(f"This runs the FROZEN TEST SPLIT (do not tune anything on its results). "
+        typed = input_fn(f"This runs the FROZEN TEST SPLIT of {qpath.name} ({label}; do not tune anything on its results). "
                          f"Type '{phrase}' to continue: ")
         if typed.strip() != phrase:
             sys.exit("Confirmation did not match; nothing was run.")
 
-    qpath = Path(questions_path or QUESTIONS_PATH)
     questions = load_questions(qpath, split=split)
     if args.ids:
         unknown = set(args.ids) - {q.id for q in questions}
@@ -177,7 +192,8 @@ def main(argv=None, *, input_fn=input, make_env=None, llm_fn=None, results_root:
         "timestamp": datetime.now().isoformat(timespec="seconds"), "git_sha": code_version(),
         "model": args.model or cfg["llm"]["model"], "temperature": cfg["llm"]["temperature"],
         "seed": cfg["llm"]["seed"], "split": split, "systems": systems, "question_ids": [q.id for q in questions],
-        "questions_path": str(qpath.relative_to(REPO)) if qpath.is_relative_to(REPO) else str(qpath),
+        "question_set": label,
+        "questions_path": str(qpath.resolve().relative_to(REPO)) if qpath.resolve().is_relative_to(REPO) else str(qpath),
         "questions_sha256": _sha256(qpath), "dcf_assumptions": str(env.dcf_assumptions),
         "dcf_assumptions_sha256": _sha256(env.dcf_assumptions), "db": args.db if not make_env else "(test env)",
         "facts_unverified": f"{facts[1]} of {facts[0]}",

@@ -9,7 +9,8 @@ import pytest
 
 from erp.agent.llm import load_agent_config
 from erp.agent.route_score import RoutingTally, score_route
-from erp.agent.router import RoutePlan, build_catalog, route, route_schema, router_messages, search_year
+from erp.agent.router import (RoutePlan, build_catalog, metric_names, metrics_named_in, route, route_schema,
+                              router_messages, search_year)
 from erp.agent.tools import TOOL_NAMES, SearchArgs, ToolCall
 from fakes import ScriptedLLM
 from test_dcf_run import TOY_YAML
@@ -302,3 +303,84 @@ def test_year_filter_only_touches_search_calls(catalog):
         {"tool": "get_financial_fact", "metric_id": "revenue_from_operations", "period": "FY25", "basis": "consolidated"}]}
     plan = route_q(catalog, "What was revenue in FY25?", reply)
     assert plan.calls[0].args == {"metric_id": "revenue_from_operations", "period": "FY25", "basis": "consolidated"}
+
+
+# ---------- E2: a metric the question names by its own name (decided by code) ----------
+# PDEV-07 pattern: "profit for the year, including non-controlling interests" was routed to
+# profit_attributable_to_owners + non_controlling_interests (the inputs, not the line asked for).
+
+PAT_QUESTIONS = ["What was TCS's profit for the year in FY26, including non-controlling interests?",
+                 "What was TCS's profit for the year, including non-controlling interests, in FY26?"]
+
+
+def fact(metric, period="FY26", basis="consolidated"):
+    return {"tool": "get_financial_fact", "metric_id": metric, "period": period, "basis": basis}
+
+
+def facts_reply(*calls, qtype="numeric"):
+    return {"question_type": qtype, "refusal_reason": "none", "calls": list(calls)}
+
+
+def test_metric_names_come_from_display_name_and_definition_opening(catalog):
+    names = metric_names(catalog)
+    assert {"profit after tax", "profit for the year including non controlling interests"} <= names["profit_after_tax"]
+    assert "non controlling interests" in names["non_controlling_interests"]
+    assert "equity" not in names["non_controlling_interests"]          # bracketed qualifiers are not names
+    assert names["current_investments"] == set()                       # one word ("investments") is too loose
+    assert "revenue from operations" in names["revenue_from_operations"]
+
+
+@pytest.mark.parametrize("question,named", [
+    (PAT_QUESTIONS[0], {"profit_after_tax"}),
+    (PAT_QUESTIONS[1], {"profit_after_tax"}),
+    ("What were non-controlling interests at the end of FY26?", {"non_controlling_interests"}),
+    ("What was profit attributable to shareholders of the Company in FY26?", {"profit_attributable_to_owners"}),
+    ("What were revenue from operations and total assets in FY26?", {"revenue_from_operations", "total_assets"}),
+    ("What was TCS's equity in FY26?", set()),
+    ("What was TCS's profit in FY26?", set()),
+    ("What were lease liabilities at the end of FY26?", {"lease_liabilities_current", "lease_liabilities_non_current"}),
+])
+def test_metrics_named_in_the_question(catalog, question, named):
+    assert metrics_named_in(question, catalog) == named
+
+
+@pytest.mark.parametrize("question", PAT_QUESTIONS)
+def test_named_metric_replaces_the_models_other_metrics(catalog, question):
+    plan = route_q(catalog, question, facts_reply(fact("profit_attributable_to_owners"),
+                                                  fact("non_controlling_interests")))
+    assert plan.calls == [ToolCall(tool="get_financial_fact",
+                                   args={"metric_id": "profit_after_tax", "period": "FY26", "basis": "consolidated"})]
+    assert any("profit_after_tax" in p and "names" in p for p in plan.problems)
+
+
+def test_named_metric_keeps_each_period_and_basis(catalog):
+    q = "What was the profit for the year, including non-controlling interests, in FY25 and FY26 (standalone)?"
+    plan = route_q(catalog, q, facts_reply(fact("profit_attributable_to_owners", "FY25", "standalone"),
+                                           fact("non_controlling_interests", "FY25", "standalone"),
+                                           fact("profit_attributable_to_owners", "FY26", "standalone")))
+    assert [(c.args["metric_id"], c.args["period"], c.args["basis"]) for c in plan.calls] == [
+        ("profit_after_tax", "FY25", "standalone"), ("profit_after_tax", "FY26", "standalone")]
+
+
+@pytest.mark.parametrize("question,reply", [
+    # the model already uses the named metric: unchanged
+    (PAT_QUESTIONS[0], facts_reply(fact("profit_after_tax"))),
+    # two metrics named: code does not choose between them
+    ("What were revenue from operations and total assets in FY26?", facts_reply(fact("revenue_from_operations"))),
+    # nothing named: the model's choice stands
+    ("What was TCS's profit in FY26?", facts_reply(fact("profit_attributable_to_owners"))),
+    # not a plain lookup (a search or a ratio is in the plan): unchanged
+    (PAT_QUESTIONS[0], facts_reply(fact("profit_attributable_to_owners"),
+                                   {"tool": "search_documents", "query": "profit"}, qtype="mixed")),
+    (PAT_QUESTIONS[0], facts_reply({"tool": "compute_ratio", "ratio_id": "net_margin", "period": "FY26",
+                                    "basis": "consolidated"}, qtype="ratio")),
+    # fact lookups, but the model calls it mixed (e.g. a "why" question fetching related lines): unchanged
+    ("Why was profit before tax lower than profit before exceptional items in FY26?",
+     facts_reply(fact("profit_before_exceptional_items_and_tax"), fact("exceptional_legal_claim_provision"),
+                 qtype="mixed")),
+])
+def test_named_metric_rule_leaves_other_plans_alone(catalog, question, reply):
+    plan = route_q(catalog, question, reply)
+    assert [(c.tool, c.args.get("metric_id") or c.args.get("ratio_id")) for c in plan.calls] == \
+        [(c["tool"], c.get("metric_id") or c.get("ratio_id")) for c in reply["calls"]]
+    assert not any("names" in p for p in plan.problems)

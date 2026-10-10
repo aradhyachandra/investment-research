@@ -1,5 +1,68 @@
 # PROGRESS
 
+## 2026-10-10 — E2: prepare the v1.1 evaluation
+
+**Done** (tests first: `tests/test_eval_v1_1.py` 18 tests, 18 new in `tests/test_router.py`; seen
+failing at import before the code)
+- `eval/run_eval.py --questions FILE` (default `eval/questions.jsonl`; v1 unchanged). Other files ->
+  `eval/results/<label>/dev|test` (`questions_v1_1.jsonl` -> `v1_1`); test-split gate per file;
+  `run.json` records `question_set`, `questions_path`, `questions_sha256`; `--rescore` uses the run's
+  own file. Code: `erp.eval.questions.question_set`, `erp.eval.cli`, report header in `metrics.py`.
+- Category H: loader accepts it; routing rule `config/eval.yaml` `routing.trend` (fact/ratio tools,
+  two or more periods); no gold value -> not in numeric accuracy (n/a). Numerically scored in v1.1:
+  dev 16 of 22 (not B03, H01, E03, G01, G03, G05), test 17 of 23 (not B02, H02, E04, G02, G04, G06).
+- `scripts/make_results_table.py --sets v1 v1_1`: side by side, columns labelled per set, a
+  "not comparable" note, runs made with another question file skipped. Default output identical
+  to the current README block (checked).
+- Router (code, prompt unchanged): named-metric rule `metrics_named_in` / `_use_named_metric` in
+  `src/erp/agent/router.py`; `Catalog.metric_definitions`; `verifier.period_spans` helper.
+- Docs: `docs/E2_eval_v1_1.md`; NOTES.md (E2).
+
+**Results**
+- Live routing, qwen2.5:3b, 20 provisional dev questions: **20 of 20** (was 19 of 20). PDEV-07 is
+  still mis-picked by the model (owners + NCI); code replaces it with `profit_after_tax`.
+- R2 probes unchanged: year phrasings 5/5/5/5; recall@5 9, recall@10 11, latest share 53 of 60.
+- v1.1 DEV run (`eval/results/v1_1/dev/20261010-192232_8f34b9b5`, full + naive RAG, 7 min, dirty
+  tree): numeric accuracy full 12 of 16, naive 2 of 16; behaviour 20 of 22 vs 14 of 22; unsupported
+  claims 0 of 32 vs 4 of 16. Per category and failures: `docs/E2_eval_v1_1.md`.
+  Full-system failures: B01 (expected, unit), C05 (routed to facts, not the tax-rate ratio),
+  C11 (right number, extra CAGR periods), E01 ("not available" from the FY24 search), F01 (wrong
+  ratio route), G03 (industry comparison not refused), plus H01 missing FY25 (not numerically scored).
+- Tests, in batches: 6 files 182 passed (12 s); 9 files 299 (14 s); 9 files 337 (80 s); then one at
+  a time: pdf_to_chunks 19, real_sample_signoff 2, m5 12, m6 21, m7 1, ollama_integration 2 skipped,
+  ui 37, ui_polish 47 (33 s). **Total 959 passed, 2 skipped, 0 failed**; no batch over 90 s.
+
+**Decisions**
+- v1 keeps its folders; a new file is a new folder, never a mixed one. Labels `dev`, `test`, `v1` are
+  reserved.
+- The named-metric rule fires only for a "numeric" plan of fact lookups only, with exactly one metric
+  named and not used. Anything else is left to the model.
+- Verifier-off arm not run on v1.1 dev (time); it can be run with `--systems full_no_verifier`.
+- No test split run (v1 or v1.1); no test questions read (only ids and has-gold counted).
+
+**Known issues / flags for the author**
+- The dev run is from uncommitted code: the committed code cannot load the v1.1 file (no H). To get a
+  committed-code run: commit, then re-run the same command.
+- H "period right" passes with two periods even when the question's range has three (H01).
+- C05 / F01 / E01 are routing gaps on new D1-D4 content; not tuned (would be tuning on dev, and the
+  test split has questions of the same kinds).
+- `docs/EVAL_v1_1_review.md` was not read (it may contain test questions).
+
+**What to review**: `docs/E2_eval_v1_1.md`; the named-metric rule in `src/erp/agent/router.py`
+(`metric_names`, `metrics_named_in`, `_use_named_metric`); the H routing rule in `config/eval.yaml`;
+the folder rule in `erp.eval.questions.question_set`; `make_results_table.py --sets v1 v1_1` output.
+
+**Next**: author review and sign-off of the v1.1 gold; commit when told; then a committed-code v1.1
+dev run, and the author decides when to run the v1.1 test split (once).
+
+**How to run**
+```
+PYTHONPATH=src:tests .venv/bin/pytest -q tests/test_eval_v1_1.py tests/test_router.py
+PYTHONPATH=src:tests .venv/bin/python tests/run_provisional_dev.py --route-only
+PYTHONPATH=src .venv/bin/python eval/run_eval.py --questions eval/questions_v1_1.jsonl --systems full naive_rag
+PYTHONPATH=src .venv/bin/python scripts/make_results_table.py --sets v1 v1_1
+```
+
 ## 2026-10-10 — R2: a question naming one fiscal year filters search to that year
 
 **Done** (tests first: 16 new cases in `tests/test_router.py`, 3 in `tests/test_agent_tools.py`,

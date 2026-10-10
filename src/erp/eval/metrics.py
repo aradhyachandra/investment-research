@@ -97,10 +97,12 @@ def _cell(x):
 
 def render_report(meta: dict, metrics: dict[str, dict], descriptions: dict[str, str]) -> str:
     systems = list(metrics)
-    lines = [f"# Eval results: {meta['split']} split", "",
+    title = f"{meta['question_set']} questions, " if meta.get("question_set") else ""
+    lines = [f"# Eval results: {title}{meta['split']} split", "",
              "Counts, not percentages. Not investment advice; DCF figures are what the stated assumptions imply.", "",
              "| Run | |", "|---|---|"]
-    for key in ("timestamp", "git_sha", "model", "models_reported", "split", "questions_sha256", "dcf_assumptions_sha256",
+    for key in ("timestamp", "git_sha", "model", "models_reported", "split", "question_set", "questions_path",
+                "questions_sha256", "dcf_assumptions_sha256",
                 "facts_unverified", "gold_pending_author_check", "rescored_at"):
         if meta.get(key) is not None:
             lines.append(f"| {key} | {meta[key]} |")

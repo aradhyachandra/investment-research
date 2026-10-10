@@ -6,6 +6,14 @@
 questions: eval/questions.jsonl
 results_dir: eval/results           # dev runs -> results/dev/<run>, the test run -> results/test/<run>
 
+# Question files (E2). run_eval.py --questions <file> picks one (default: v1 above). v1 keeps
+# results/dev and results/test; any other file gets results/<label>/dev and results/<label>/test,
+# with its own one-time test-split gate. Label = file name without "questions_" (code rule,
+# erp.eval.questions.question_set). scripts/make_results_table.py --sets reads this list.
+question_sets:
+  v1: eval/questions.jsonl
+  v1_1: eval/questions_v1_1.jsonl
+
 # The test split runs once (plan 6.1, Section 9 M7). run_eval.py asks for this phrase, typed exactly.
 test_confirmation_phrase: RUN TEST SPLIT
 
@@ -30,6 +38,11 @@ routing:
     E: [search_documents]
     F: [compute_ratio, search_documents]
   check_period: [A, B, C]
+  # History/trend questions (category H, v1.1): several numbers across years. Right tools = at
+  # least one of these (a search_documents call may be added); right period = these calls cover
+  # two or more periods. The gold period of an H question is not checked (it names a range).
+  trend:
+    H: [get_financial_fact, compute_ratio]
 
 # Refusal correctness. How an answer's behaviour is classified:
 #   refuse         refused with one of `refuse_reasons`

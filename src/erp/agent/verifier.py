@@ -129,6 +129,11 @@ def periods_in(text: str) -> list[str]:
     return [t.period for t in _tokens(text) if t.kind == "period"]
 
 
+def period_spans(text: str) -> list[tuple[int, int]]:
+    """(start, end) of each period mention in a text, in order (same reader as periods_in)."""
+    return [(t.start, t.end) for t in _tokens(text) if t.kind == "period"]
+
+
 def _prior_label(label: str) -> str | None:
     m = re.fullmatch(r"(Q[1-4] )?FY(\d{2})", label or "")
     return f"{m.group(1) or ''}FY{int(m.group(2)) - 1:02d}" if m else None

@@ -2,6 +2,35 @@
 
 Open questions, TO VERIFY items, and validation TODOs. Newest first.
 
+## E2 v1.1 evaluation prepared (2026-10-10)
+
+- **Question sets and folders**: `run_eval.py --questions F`. v1 (`eval/questions.jsonl`) keeps
+  `eval/results/dev|test`; any other file -> `eval/results/<label>/dev|test`, label = file name
+  without `questions_` (`v1_1`). Labels `dev`, `test`, `v1` are refused for other files. The test gate
+  is per folder, so per file. `run.json` records `question_set`, `questions_path`, `questions_sha256`.
+- **Results table**: `make_results_table.py --sets v1 v1_1`. A run is shown under a set only if its
+  `run.json` `questions_path` has the set's file name (compared by name, not path or hash). Runs
+  with no `questions_path` (none exist; only test fixtures) are kept. Without `--sets`: v1 only, as before.
+- **Category H**: no `gold_value`, so not in numeric accuracy (dev H01 and test H02). TO VERIFY
+  (author): whether H should get a numeric check, e.g. a `gold_values` list (several numbers with
+  periods) in the question file. That would be a question-file format change, so it is the author's call.
+- **H routing rule** (`config/eval.yaml` `routing.trend`) is Claude's judgement: fact/ratio calls
+  (a search may be added) covering two or more periods. The gold period is not checked. Weakness seen
+  on dev: V11-H01 ("from FY24 to FY26") was routed to FY24 + FY26 only and passes, though FY25 is
+  missing. TO VERIFY (author): require every year in the named range? Not changed (would be tuning on dev).
+- **Named-metric rule (router, code)**: fires only when the question names exactly one metric by its
+  own name, the model says `numeric`, and the plan is fact lookups only, none for that metric.
+  Names = display name minus bracketed qualifiers, plus the definition's opening phrase; at least two
+  words. Definitions are read from the `metric` table (not added to the prompt). TO VERIFY: some
+  definition openings are long sentences (e.g. `eps_basic`, `shares_outstanding`) and will never
+  match; harmless. v1 dev EV-A03 ("profit after tax, including non-controlling interests") names two
+  metrics (`profit_after_tax` and `non_controlling_interests`), so the rule does **not** fire there.
+- **Unchanged by the rule**: R2 year probes (5/5/5/5), retrieval probes (recall@5 9, @10 11, latest
+  53 of 60). Live routing 20 of 20; PDEV-07 is still mis-picked by the model and corrected by code
+  (see `RoutePlan.problems`).
+- The v1.1 dev run was made from uncommitted code (git SHA `-dirty`). The v1.1 file cannot be loaded
+  by the committed code (no category H), so a committed-code run needs a commit first.
+
 ## R2 year filter for search (2026-10-10)
 
 - **Rule (code, `router.search_year` / `set_search_year`)**: the question names exactly one period,

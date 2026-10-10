@@ -12,7 +12,8 @@
                      numeric claim in answers to questions that have gold_sources, and also over
                      only the claims that match the gold value.
   behaviour          answered / partial / refuse / not_available / error (config/eval.yaml).
-  routing            coarse: the set of tools used vs the category's expected set (config).
+  routing            coarse: the set of tools used vs the category's expected set (config). Trend
+                     questions (H): fact/ratio tools, covering two or more periods.
   unsupported        numeric claims with no evidence (claims.py `supported`).
   verifier           rejected = the verifier failed the composed text and the template shipped;
                      would_reject = the verifier failed it (recorded also when it is switched off).
@@ -81,11 +82,19 @@ def routing_check(q: EvalQuestion, answer: Answer, ecfg: dict | None = None) -> 
         return (plan.refuse, plan.refuse)
     if q.expected_behavior == "not_available" or (q.category == "B" and q.gold_value is None):
         return None
+    trend = (rules.get("trend") or {}).get(q.category)
     expected = rules["expected_tools"].get(q.category)
-    if expected is None:
+    if expected is None and trend is None:
         return None
     if plan.refuse or plan.question_type == "routing_failed":
         return (False, False)
+    if trend is not None:
+        # Several numbers across years (category H): data tools from the list (a search may be added),
+        # and "period right" = those calls cover two or more periods.
+        tools = {c.tool for c in plan.calls}
+        tools_ok = bool(tools & set(trend)) and tools <= {*trend, "search_documents"}
+        periods = {c.args.get("period") for c in plan.calls if c.tool in trend}
+        return (tools_ok, tools_ok and len(periods) >= 2)
     tools_ok = {c.tool for c in plan.calls} == set(expected)
     period_ok = tools_ok
     if tools_ok and q.category in rules["check_period"] and q.gold_period and period_key(q.gold_period):
