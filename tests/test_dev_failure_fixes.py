@@ -220,8 +220,9 @@ def test_not_listed_fact_call_becomes_a_search_with_the_question(catalog):
                                                "period": "FY26"}],
                                     "question_type": "numeric", "refusal_reason": "none"})
     assert not plan.refuse
-    # R1: the question names FY26, so the search ranks all reports without the recency preference.
-    assert [(c.tool, c.args) for c in plan.calls] == [("search_documents", {"query": q, "prefer_latest": False})]
+    # R1/R2: the question names FY26 (which has data), so the search is filtered to FY26, no recency weight.
+    assert [(c.tool, c.args) for c in plan.calls] == [
+        ("search_documents", {"query": q, "fiscal_year": 2026, "prefer_latest": False})]
     assert any("not_listed" in p for p in plan.problems)
 
 

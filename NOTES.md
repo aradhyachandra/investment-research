@@ -2,6 +2,37 @@
 
 Open questions, TO VERIFY items, and validation TODOs. Newest first.
 
+## R2 year filter for search (2026-10-10)
+
+- **Rule (code, `router.search_year` / `set_search_year`)**: the question names exactly one period,
+  it is an FY label, and it is in `catalog.periods` (FY23-FY26). Then the search call gets
+  `fiscal_year` = the resolver's `fiscal_year` (FY24 -> 2024; `Catalog.fiscal_year_end_month` comes
+  from the company table). Only the question text is read for the filter; a year that appears only
+  in the model's search phrase still turns R1 off, with no filter. The model cannot set
+  `fiscal_year` (not in `CALL_FIELDS`). The router prompt is unchanged.
+- **Not filtered**: two or more periods, a quarter (incl. FY + quarter), a year with no data. These
+  rank all reports with no weight, as in R1. Live: "acquire in FY24 and FY25" -> top 5 = FY24 x3,
+  FY26 x2, no FY25. Possible follow-up: one search per named year. Not built.
+- **The filter is on `fiscal_year` metadata, not on doc_type.** Today the only documents for FY24-FY26
+  are annual reports (the Q1 FY27 fact sheet is fiscal_year 2027). A later FY fact sheet or quarterly
+  document for the same year would also pass the filter. TO VERIFY whether that is wanted.
+- **Fallback** (`agent/tools.py` `_search_tool`): a filtered search with no hits is re-run without the
+  filter (`prefer_latest` unchanged, i.e. off), with a note in `ToolResult.notes` and
+  `detail.year_filter_fallback = True`. Today this applies only to FY23 (facts loaded, no FY23 report indexed).
+  If even the fallback finds nothing, the result fails ("no passages found"). The note is on the
+  failed result, but the answer loop only lists notes from successful results.
+- **Probes (PROVISIONAL)**: year phrasings Y01-Y04 3/1/2/0 -> 5/5/5/5 of 5 from the named year.
+  12 probes: recall@5 9 -> 9, recall@10 11 -> 11, latest share 47 -> 53 of 60 (PROV-09 and PROV-11
+  name "FY 2026" and are now filtered; PROV-11 8 -> 6). `run_provisional_probes.py --prefer-latest`
+  now calls the router's `set_search_year` plus the same fallback, with the question as the search phrase.
+- **Routing regression (live, qwen2.5:3b)**: 19 of 20 before R2 (two runs) and after R2, with identical
+  routes. **The miss predates R2**: PDEV-07 ("profit for the year, including non-controlling
+  interests", expected `profit_after_tax`) now routes to `profit_attributable_to_owners` +
+  `non_controlling_interests`. Last recorded 20 of 20 was in M7.1 (2026-10-04). Likely cause: the
+  metric list in the prompt grew in D1-D4 (TO VERIFY). Not investigated or changed here.
+- **Eval effects (eval not run)**: questions naming one year with data now cite only that year's
+  report. The naive-RAG baseline is unchanged.
+
 ## R1 prefer the latest report in search (2026-10-10)
 
 - **Recency weight** (`config/ingest.yaml` `retrieval.recency.factor_per_year: 0.95`, TO VERIFY):
@@ -12,7 +43,7 @@ Open questions, TO VERIFY items, and validation TODOs. Newest first.
 - **Probes (PROVISIONAL)**: recall@5 9 -> 9, recall@10 11 -> 11, top-5 from FY26 28 -> 47 of 60.
   PROV-01 4 -> 1, PROV-02 2 -> 1, PROV-04 2 -> 1; PROV-09/PROV-11 name "FY 2026" so get no weight
   (PROV-11 stays at 8, was 7 before D3). Near-duplicate collapse (brief step 2) not built.
-- **Plan/brief vs reality: the router never passes `fiscal_year`.** `CALL_FIELDS` has no year field
+- **Plan/brief vs reality: the router never passes `fiscal_year`.** (Addressed in R2, above.) `CALL_FIELDS` has no year field
   for searches, so "when the question names a year, filter to that year" was never true. R1 keeps
   year questions exactly as before (no weight, no filter). Four new PROVISIONAL year phrasings
   (`tests/provisional_year_probes.jsonl`): top-5 from the named year's report as the agent runs it /

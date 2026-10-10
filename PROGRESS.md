@@ -1,5 +1,62 @@
 # PROGRESS
 
+## 2026-10-10 — R2: a question naming one fiscal year filters search to that year
+
+**Done** (tests first: 16 new cases in `tests/test_router.py`, 3 in `tests/test_agent_tools.py`,
+written and seen failing before the code)
+- `src/erp/agent/router.py`: `Catalog.fiscal_year_end_month` (from the company table);
+  `search_year(question, catalog)`: if the question names exactly one period, and it is an FY label
+  with data, the resolver's fiscal_year is returned, otherwise None; `set_search_year` (replaces
+  R1's `_year_named_turns_off_latest`) adds `fiscal_year` to search calls and keeps R1's
+  `prefer_latest=False` rule. Router prompt **unchanged**. The model cannot set `fiscal_year`.
+- `src/erp/agent/tools.py` `_search_tool`: a filtered search with no hits is re-run unfiltered, with a
+  note in `notes` and `detail.year_filter_fallback`.
+- `tests/run_provisional_probes.py --prefer-latest`: uses the router's `set_search_year` and the same
+  fallback (was a copy of the R1 rule).
+- Pinned tests updated: `test_router` (mixed FY26 question -> search gets `fiscal_year: 2026`),
+  `test_dev_failure_fixes` (rent FY26 question, same).
+- Docs: `docs/R2_year_filter.md`, NOTES.md (R2). No re-index; eval not run.
+
+**Results (PROVISIONAL)**
+- Year phrasings, top-5 from the named year: Y01 3 -> 5, Y02 1 -> 5, Y03 2 -> 5, Y04 0 -> 5 (of 5).
+- 12 probes: recall@5 9 -> 9, recall@10 11 -> 11, latest-report share 47 -> 53 of 60 (PROV-09 and
+  PROV-11 name FY 2026 and are now filtered; PROV-11 8 -> 6).
+- Routing, live qwen2.5:3b, 20 dev questions: **19 of 20 before (two runs) and after, with identical
+  routes**. The miss, PDEV-07, predates R2 (see known issues).
+- Live: FY23 question -> fallback with the note (no FY23 report indexed). Two-year questions get a
+  mixed, unweighted top 5 (e.g. FY24 + FY25 acquisitions -> no FY25 passage).
+- Tests, in batches: data-heavy 5 files 260 passed (83 s); 8 files 204 passed; 10 files 318 passed;
+  then one file at a time: pdf_to_chunks 19, real_sample_signoff 2, m5 12, m6 21, m7 1 passed,
+  ollama_integration 2 skipped (opt-in), ui 37, ui_polish 47 passed (32 s). Total 921 passed,
+  2 skipped, 0 failed; no batch took over 90 s.
+
+**Decisions**
+- The filter comes only from the question text, never from the model's search phrase.
+- A quarter, a year with no data, or two or more periods -> no filter (conservative).
+- The filter uses the existing `fiscal_year` metadata filter, not doc_type. Today FY24-FY26 have only annual reports.
+- Fallback keeps the recency weight off (a year was named).
+
+**Known issues / flags for the author**
+- **Routing baseline is 19 of 20, not 20 of 20**, before any R2 change: PDEV-07 (profit including
+  NCI) -> `profit_attributable_to_owners` + `non_controlling_interests` instead of `profit_after_tax`.
+  Deterministic (temperature 0, two identical runs). Probably caused by the metric list growing in D1-D4. Not fixed here.
+- Two-year questions are not filtered and can miss a named year. A possible fix is one search per year. Not built.
+- A first full-suite run by me hung past 10 minutes and was stopped. It was a scripting mistake: the
+  file list was empty, so pytest ran everything at once. The batched runs above are the real result.
+
+**What to review**: `docs/R2_year_filter.md`; `search_year` / `set_search_year` in
+`src/erp/agent/router.py`; the fallback note wording in `src/erp/agent/tools.py`; the PDEV-07 regression;
+whether two-year questions should get one search per year.
+
+**Next**: author review; commit when told. Nothing committed.
+
+**How to run**
+```
+PYTHONPATH=src:tests .venv/bin/pytest -q tests/test_router.py tests/test_agent_tools.py tests/test_dev_failure_fixes.py tests/test_search.py
+PYTHONPATH=src .venv/bin/python tests/run_provisional_probes.py --prefer-latest
+PYTHONPATH=src:tests .venv/bin/python tests/run_provisional_dev.py --route-only
+```
+
 ## 2026-10-10 — R1: prefer the latest annual report in search
 
 **Done** (tests first: 15 new in `tests/test_search.py`, 7 in `tests/test_router.py`, 2 in

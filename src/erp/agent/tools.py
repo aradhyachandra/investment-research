@@ -314,8 +314,18 @@ def _dcf_tool(a: DCFArgs, env: ToolEnv) -> ToolResult:
 
 
 def _search_tool(a: SearchArgs, env: ToolEnv) -> ToolResult:
-    hits = search_documents(a.query, top_k=env.search_top_k, doc_type=a.doc_type, fiscal_year=a.fiscal_year,
-                            prefer_latest=a.prefer_latest, collection=env.collection, embed_fn=env.embed_fn)
+    def run(fiscal_year):
+        return search_documents(a.query, top_k=env.search_top_k, doc_type=a.doc_type, fiscal_year=fiscal_year,
+                                prefer_latest=a.prefer_latest, collection=env.collection, embed_fn=env.embed_fn)
+    hits, notes = run(a.fiscal_year), []
+    # R2: a year with nothing indexed (e.g. FY23: facts in the database, no report in the index) falls
+    # back to all reports, and says so, rather than returning nothing.
+    fallback = a.fiscal_year is not None and not hits
+    if fallback:
+        label = f"FY{a.fiscal_year % 100:02d}"
+        hits = run(None)
+        notes.append(f"No passages from {label} documents are indexed, so all indexed reports were searched "
+                     f"instead; these passages are not from {label}.")
     periods = dict(env.conn.execute("SELECT source_id, period_covered FROM source_document").fetchall())
     evidence, passages = [], []
     for h in hits:
@@ -327,7 +337,7 @@ def _search_tool(a: SearchArgs, env: ToolEnv) -> ToolResult:
         passages.append(Passage(evidence_id=eid, section=h.section, text=h.text[:env.passage_chars]))
     return ToolResult(tool="search_documents", args=a.model_dump(), ok=bool(hits),
                       error=None if hits else "no passages found", evidence=evidence, passages=passages,
-                      detail={"results": [h.model_dump() for h in hits]})
+                      notes=notes, detail={"results": [h.model_dump() for h in hits], "year_filter_fallback": fallback})
 
 
 def _day(d: date) -> str:

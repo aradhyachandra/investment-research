@@ -198,3 +198,37 @@ def test_search_tool_prefers_latest_report_unless_told_not_to(env, monkeypatch, 
     monkeypatch.setattr("erp.agent.tools.search_documents", spy)
     call(env, "search_documents", query="attrition", **args)
     assert seen["prefer_latest"] is expected
+
+
+# ---------- R2: year filter, with a visible fallback when that year has no indexed passages ----------
+# Every test chunk is from the FY26 annual report (fiscal_year 2026).
+
+def test_search_with_an_indexed_year_is_filtered_and_has_no_fallback_note(env):
+    r = call(env, "search_documents", query="cyber attacks security", fiscal_year=2026, prefer_latest=False)
+    assert r.ok and r.evidence and all(e.period == "FY26" for e in r.evidence)
+    assert r.args["fiscal_year"] == 2026
+    assert r.notes == [] and r.detail["year_filter_fallback"] is False
+
+
+def test_search_for_a_year_with_nothing_indexed_falls_back_to_all_reports_with_a_note(env, monkeypatch):
+    seen = []
+    real = run_tool.__globals__["search_documents"]
+
+    def spy(query, **kw):
+        seen.append(kw)
+        return real(query, **kw)
+
+    monkeypatch.setattr("erp.agent.tools.search_documents", spy)
+    r = call(env, "search_documents", query="cyber attacks security", fiscal_year=2023, prefer_latest=False)
+    assert [kw["fiscal_year"] for kw in seen] == [2023, None]          # filtered first, then unfiltered
+    assert all(kw["prefer_latest"] is False for kw in seen)            # a year was named: no recency weight
+    assert r.ok and r.evidence[0].evidence_id == "chunk:c-cyber"
+    assert r.detail["year_filter_fallback"] is True
+    assert len(r.notes) == 1 and "FY23" in r.notes[0] and "not from FY23" in r.notes[0]
+
+
+def test_fallback_that_also_finds_nothing_still_says_so(env, monkeypatch):
+    monkeypatch.setattr("erp.agent.tools.search_documents", lambda query, **kw: [])
+    r = call(env, "search_documents", query="anything", fiscal_year=2023)
+    assert not r.ok and r.error == "no passages found"
+    assert any("FY23" in n for n in r.notes)

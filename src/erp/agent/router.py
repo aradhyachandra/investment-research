@@ -11,6 +11,11 @@ lookup for a period with no data. A reply that cannot be read is a routing failu
 Periods named in the question (read by code) are added to the allowed period values, so a
 question about a period with no data (e.g. "what dates does Q3 FY24 cover?") can still reach
 explain_period instead of being forced into a refusal.
+
+Search year (R1, R2), decided by code from the question text, never by the model: a question naming
+exactly one fiscal year with data (FY24, FY 2024, 2023-24, fiscal 2024) filters search_documents to
+that year; a question naming no period lets search prefer the latest report; anything else (two or
+more periods, a quarter, a year with no data) gets neither.
 """
 import json
 import sqlite3
@@ -23,6 +28,7 @@ from pydantic import BaseModel
 from erp.agent.tools import ARGS_MODELS, TOOL_NAMES, ToolCall
 from erp.agent.verifier import periods_in
 from erp.ingest.pdf_to_chunks import load_ingest_config
+from erp.periods import resolve_period
 from erp.tools.ratios import load_ratios
 
 QUESTION_TYPES = ["numeric", "ratio", "valuation", "qualitative", "period", "mixed", "out_of_scope"]
@@ -47,6 +53,7 @@ class Catalog(BaseModel):
     periods: list[str]               # labels with data in the database
     scenarios: list[str]             # DCF scenario names in the assumptions file ([] if none)
     doc_types: list[str]             # indexed document types
+    fiscal_year_end_month: int       # from the company table; for the period resolver
 
 
 class RoutePlan(BaseModel):
@@ -61,7 +68,8 @@ class RoutePlan(BaseModel):
 
 
 def build_catalog(conn: sqlite3.Connection, ticker: str, dcf_assumptions: Path) -> Catalog:
-    company = conn.execute("SELECT company_id, name FROM company WHERE ticker_nse = ?", (ticker,)).fetchone()
+    company = conn.execute("SELECT company_id, name, fiscal_year_end_month FROM company WHERE ticker_nse = ?",
+                           (ticker,)).fetchone()
     if company is None:
         raise RoutingError(f"unknown company ticker {ticker!r}")
     metrics = dict(conn.execute("SELECT metric_id, display_name FROM metric ORDER BY metric_id").fetchall())
@@ -74,7 +82,8 @@ def build_catalog(conn: sqlite3.Connection, ticker: str, dcf_assumptions: Path) 
             scenarios = list((yaml.safe_load(f) or {}).get("scenarios") or {})
     return Catalog(company_name=company[1], ticker=ticker, metrics=metrics,
                    ratios={k: r["display_name"] for k, r in load_ratios().items()}, periods=periods,
-                   scenarios=scenarios, doc_types=load_ingest_config()["indexable_doc_types"])
+                   scenarios=scenarios, doc_types=load_ingest_config()["indexable_doc_types"],
+                   fiscal_year_end_month=company[2])
 
 
 def route_schema(catalog: Catalog, max_calls: int, extra_periods: list[str] = ()) -> dict:
@@ -211,11 +220,28 @@ def _to_call(item: dict) -> ToolCall:
                                           if k in fields and k in CALL_FIELDS and v is not None})
 
 
-def _year_named_turns_off_latest(calls: list[ToolCall], question: str) -> None:
-    """R1, decided by code: search prefers the latest report (SearchArgs default) unless the question
-    or the search phrase names a year; then the search ranks all reports as before."""
+def search_year(question: str, catalog: Catalog) -> int | None:
+    """R2: the fiscal_year to filter search to, or None. Set only when the question names exactly one
+    period, and it is a fiscal year (not a quarter) with data in the database; the number comes from
+    the period resolver (FY24 -> 2024, the year the fiscal year ends in)."""
+    named = list(dict.fromkeys(periods_in(question)))
+    if len(named) != 1 or named[0] not in catalog.periods:
+        return None
+    p = resolve_period(named[0], catalog.fiscal_year_end_month)
+    return p.fiscal_year if p.period_type == "FY" else None
+
+
+def set_search_year(calls: list[ToolCall], question: str, catalog: Catalog) -> None:
+    """Decided by code. R1: search prefers the latest report (SearchArgs default) unless the question
+    or the search phrase names a period; then the search ranks all reports without the weight.
+    R2: if the question names exactly one fiscal year with data, the search is also filtered to it."""
+    year = search_year(question, catalog)
     for c in calls:
-        if c.tool == "search_documents" and (periods_in(question) or periods_in(c.args.get("query") or "")):
+        if c.tool != "search_documents":
+            continue
+        if year is not None:
+            c.args["fiscal_year"] = year
+        if periods_in(question) or periods_in(c.args.get("query") or ""):
             c.args["prefer_latest"] = False
 
 
@@ -281,7 +307,7 @@ def route(question: str, catalog: Catalog, llm_fn, *, max_calls: int) -> RoutePl
             items[i] = {"tool": "search_documents", "query": c.get("query") or question}
             problems.append(f"router chose metric_id {NOT_LISTED}; the filings are searched instead")
     calls = [_to_call(c) for c in items]
-    _year_named_turns_off_latest(calls, question)
+    set_search_year(calls, question, catalog)
     if not calls:
         return RoutePlan(**failed, problems=["router chose no tools and gave no refusal reason"])
     with_data = [p for p in dict.fromkeys(periods_in(question)) if p in catalog.periods]

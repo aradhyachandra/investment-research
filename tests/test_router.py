@@ -9,7 +9,7 @@ import pytest
 
 from erp.agent.llm import load_agent_config
 from erp.agent.route_score import RoutingTally, score_route
-from erp.agent.router import RoutePlan, build_catalog, route, route_schema, router_messages
+from erp.agent.router import RoutePlan, build_catalog, route, route_schema, router_messages, search_year
 from erp.agent.tools import TOOL_NAMES, SearchArgs, ToolCall
 from fakes import ScriptedLLM
 from test_dcf_run import TOY_YAML
@@ -240,4 +240,65 @@ def test_preference_only_touches_search_calls(catalog):
         {"tool": "search_documents", "query": "revenue drivers"}]}
     plan = route_q(catalog, "What was revenue in FY26 and what drove it?", reply)
     assert plan.calls[0].args == {"metric_id": "revenue_from_operations", "period": "FY26", "basis": "consolidated"}
-    assert plan.calls[1].args == {"query": "revenue drivers", "prefer_latest": False}
+    # R2: the question names one fiscal year with data, so the search is also filtered to it.
+    assert plan.calls[1].args == {"query": "revenue drivers", "fiscal_year": 2026, "prefer_latest": False}
+
+
+# ---------- R2: a question naming one fiscal year filters the search to it (decided by code) ----------
+# The test catalog has data for FY25 and FY26 only (sample facts).
+
+def test_catalog_carries_the_fiscal_year_end_month(catalog):
+    assert catalog.fiscal_year_end_month == 3            # from the company table, not hard-coded
+
+
+@pytest.mark.parametrize("question", ["What did TCS say about attrition in FY25?",
+                                      "How did TCS describe attrition in its FY 2025 annual report?",
+                                      "How did TCS describe attrition in fiscal 2025?",
+                                      "What was attrition in 2024-25?",
+                                      "What did TCS say about attrition in FY25, compared with FY25 targets?"])
+def test_question_naming_one_year_filters_the_search_to_it(catalog, question):
+    plan = route_q(catalog, question)
+    assert plan.calls == [ToolCall(tool="search_documents",
+                                   args={"query": "employee attrition", "fiscal_year": 2025, "prefer_latest": False})]
+    assert SearchArgs(**plan.calls[0].args).fiscal_year == 2025
+
+
+def test_search_year_comes_from_the_period_resolver(catalog):
+    # Same rule as the agent; fiscal_year = the year the fiscal year ends in (resolver), not the label's digits.
+    assert search_year("Attrition in FY26?", catalog) == 2026
+    assert search_year("Attrition?", catalog) is None
+
+
+@pytest.mark.parametrize("question", ["How did attrition change between FY25 and FY26?",
+                                      "Compare attrition in fiscal 2025 with 2025-26."])
+def test_two_years_named_no_filter_and_no_preference(catalog, question):
+    plan = route_q(catalog, question)
+    assert plan.calls[0].args == {"query": "employee attrition", "prefer_latest": False}
+    assert search_year(question, catalog) is None
+
+
+@pytest.mark.parametrize("question", ["What did TCS say about attrition in FY22?",   # a year with no data
+                                      "What did TCS say about attrition in Q1 FY27?",  # a quarter, not a year
+                                      "Attrition in FY26 and in Q1 FY27?"])            # a year and a quarter
+def test_no_filter_unless_exactly_one_known_fiscal_year(catalog, question):
+    plan = route_q(catalog, question)
+    assert plan.calls[0].args == {"query": "employee attrition", "prefer_latest": False}
+
+
+def test_year_only_in_the_search_phrase_does_not_filter(catalog):
+    reply = {**SEARCH_REPLY, "calls": [{"tool": "search_documents", "query": "attrition FY25"}]}
+    assert route_q(catalog, "How has attrition moved?", reply).calls[0].args == \
+        {"query": "attrition FY25", "prefer_latest": False}
+
+
+def test_the_model_cannot_set_the_year_filter(catalog):
+    reply = {**SEARCH_REPLY, "calls": [{"tool": "search_documents", "query": "attrition", "fiscal_year": 2025}]}
+    assert route_q(catalog, "How does TCS retain talent?", reply).calls[0].args == {"query": "attrition"}
+    assert "fiscal_year" not in route_schema(catalog, max_calls=4)["properties"]["calls"]["items"]["properties"]
+
+
+def test_year_filter_only_touches_search_calls(catalog):
+    reply = {"question_type": "numeric", "refusal_reason": "none", "calls": [
+        {"tool": "get_financial_fact", "metric_id": "revenue_from_operations", "period": "FY25", "basis": "consolidated"}]}
+    plan = route_q(catalog, "What was revenue in FY25?", reply)
+    assert plan.calls[0].args == {"metric_id": "revenue_from_operations", "period": "FY25", "basis": "consolidated"}
