@@ -3,6 +3,8 @@
 # added in D1 (data/manual/financials_tcs.csv), read from the FY26 annual report. Still missing
 # from the plan's v1 list (Section 4.2): total_expenses, employee_benefit_expense, eps_diluted,
 # borrowings, dividends_paid, share_buybacks, diluted_shares, headcount, attrition_percent.
+# D3 added exceptional_legal_claim_settlement (the FY24/FY25 reports' single exceptional line) and
+# FY23-FY25 history from the FY25 and FY24 reports.
 # Calculated figures (EBIT, total capex, total exceptional items, average equity) are NOT
 # metrics: they are built in code from these facts (config/ratios.yaml).
 #
@@ -172,7 +174,23 @@ metrics:
     definition: >-
       The "Provision towards legal claim" line under "Exceptional items" on the Statement of
       Profit and Loss (note 20), as a positive charge (it reduces profit). A year printed as
-      "-" is stored as 0.
+      "-" is stored as 0. Printed in the FY26 report only (the CSC claim); not the same line as
+      the FY24 report's "Settlement of legal claim" (exceptional_legal_claim_settlement).
+
+  # D3 (FY24 and FY25 reports): those reports print one exceptional line, under a different name.
+  exceptional_legal_claim_settlement:
+    display_name: Exceptional item - settlement of legal claim
+    statement: income
+    unit_kind: currency
+    canonical_unit: INR_CRORE
+    is_flow: 1
+    definition: >-
+      The "Settlement of legal claim" line under "Exceptional item" on the Statement of Profit and
+      Loss in the FY24 and FY25 reports (note 20), as a positive charge (it reduces profit). In
+      FY24 this is the balance of punitive damages provided in the Epic Systems case (FY24 report,
+      PDF p.231). A different line and a different claim from exceptional_legal_claim_provision
+      (FY26 report, the CSC claim), so the two are not one series. A year printed as "-" is stored
+      as 0.
 
   profit_before_tax:
     display_name: Profit before tax

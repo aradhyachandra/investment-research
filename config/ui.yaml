@@ -47,6 +47,9 @@ snapshot:
   period: FY26
   compare_period: FY25
   basis: consolidated
+  # D3: a small trend line under each card, one tool call per year, oldest first. A year with no
+  # figure in the database is shown as "not available".
+  trend_periods: [FY23, FY24, FY25, FY26]
   cards:
     - {label: "Revenue from operations", tool: get_financial_fact, metric_id: revenue_from_operations,
        change_ratio: revenue_growth_yoy}

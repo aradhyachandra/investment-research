@@ -65,7 +65,9 @@ def _rows(path):
 
 
 def manual_rows():
-    return _rows(MANUAL_CSV)
+    """The D1 rows: everything read from the FY26 annual report. D3 added rows from the FY25 and
+    FY24 reports to the same file; those are tested in tests/test_d3_history.py."""
+    return [r for r in _rows(MANUAL_CSV) if r["source_doc"] == AR]
 
 
 def manual_row(metric_id, period):

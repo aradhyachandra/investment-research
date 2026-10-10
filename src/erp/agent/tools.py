@@ -209,7 +209,7 @@ def _ratio_tool(a: RatioArgs, env: ToolEnv) -> ToolResult:
         input_evidence_ids=[e.evidence_id for e in fact_evs])
     numbers = [_number(calc_id, "value", f"{r.display_name}, {r.period_label} ({r.basis})", r.value, r.unit,
                        r.period_label, r.basis, env.display, quantity=r.ratio_id,
-                       measures_change=load_ratios()[r.ratio_id]["kind"] == "yoy_growth")]
+                       measures_change=load_ratios()[r.ratio_id]["kind"] in ("yoy_growth", "cagr"))]
     # A sum or average operand (e.g. EBIT, average equity) is a figure code computed, so it is a
     # tool number too: an answer may quote it, and the verifier can check it.
     spec = load_ratios()[r.ratio_id]

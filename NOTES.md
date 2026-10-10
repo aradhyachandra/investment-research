@@ -2,6 +2,53 @@
 
 Open questions, TO VERIFY items, and validation TODOs. Newest first.
 
+## D3 four years of history (2026-10-10)
+
+- TO VERIFY (author): the 100 new rows from the FY25 and FY24 annual reports
+  (`docs/D3_facts_for_review.md`). 49 of them have an independent figure in another report (all
+  agree); the 25 FY23 rows and the FY25 settlement line have none.
+- TO VERIFY: new metric `exceptional_legal_claim_settlement` for the FY24/FY25 reports' single
+  exceptional line ("Settlement of legal claim", FY24 958 = Epic Systems, FY24 report PDF p.231),
+  kept apart from `exceptional_legal_claim_provision` (FY26 report, CSC claim). The FY26 report's three
+  exceptional lines have no FY24/FY23 rows (not printed there); zeros only where "-" is printed
+  (settlement FY25 and FY23).
+- TO VERIFY: page labels. Both new reports print page numbers in the page header. FY25 report PDF
+  4-332 = printed 2-330; FY24 report PDF 3-336 = printed 3-336. Ingest check: FY24 334/334 exact;
+  FY25 301/329 exact, 28 unreadable glyphs, 0 contradictions. `published_date` not recorded
+  (statements signed 10 April 2025 and 12 April 2024); `retrieved_on` = file date on disk.
+- **Primary source for FY25 moved** from the FY26 report (signed off) to the FY25 report (not yet
+  signed off). Same figures, but until sign-off: FY25 facts, FY25 ratios and the snapshot's FY25
+  comparison show "not yet checked by a human"; DCF is unaffected (FY26 only).
+- **Eval effects (eval not run; `eval/questions.jsonl` not edited):**
+  - FY25 questions' gold sources cite the FY26 report (source 1, p.166/167): EV-A02, A04, A06, A08,
+    A09, B02, C02 (and C05's FY25 input). Answers will now cite the FY25 report (source 3, PDF
+    p.180/181), which the citation score counts as not gold, even though the figure is the same and
+    the FY26 page is listed in the evidence note ("also printed in"). Author to decide: add the FY25-report
+    pages to gold, or score cross-checks as gold.
+  - EV-G05 (dev, "three-year revenue CAGR to FY26") has no gold value and expects a decline. The
+    system can now compute it (`revenue_cagr_3y`, 5.80%). The gold is now out of date; author's call.
+  - The router's period list now includes FY23 and FY24, and its ratio list `revenue_cagr_3y`.
+    Routing of the old dev questions may shift (not measured).
+  - Any future test-split run is not comparable with the 2026-10-07 run.
+- **Retrieval with three reports** (12 PROVISIONAL probes, not tuned): recall@5 9 -> 9 of 12,
+  recall@10 11 -> 11 of 12; the expected FY26 page fell in rank on 4 probes (PROV-01 1 -> 4,
+  PROV-02 1 -> 2, PROV-04 1 -> 2, PROV-11 7 -> 8); 32 of 60 top-5 results now come from the FY25/FY24
+  reports. The probes count only the FY26 page as right. The agent does not filter or prefer by
+  year; the composer sees each passage's document title (which names the year) but is not told the
+  period separately. Ideas for a later milestone, not done: prefer the latest report unless the
+  question names a year; show "document period" in the composer's passage header.
+- `shares_outstanding` (year end) is not the EPS weighted average in FY24: year end 361,80,87,518,
+  weighted average 364,68,51,755 (buy-back extinguished 4,09,63,855 shares on 13 December 2023;
+  FY24 report PDF 181/203). The D2 note "year-end count used as diluted count" is only safe for
+  years with no change; the DCF uses FY26, where they are equal.
+- Restatement ordering: the loader needs a restated row to come after the row it supersedes in the
+  CSV. If a later report ever restates a figure, the later report's row (already earlier in the
+  file for FY25) would have to be moved below the earlier report's row. Not needed in D3.
+- Page-number reading now groups digits per printed line (row), so a body-text digit under a
+  header page number is not glued onto it. FY26 checks unchanged (test still passes).
+- Snapshot trend: one tool call per card per year (4 cards x 4 years, plus the existing calls), on
+  the in-memory copy. Y axis from zero on purpose.
+
 ## D2 DCF inputs from the database (2026-10-08)
 
 - Base-year revenue, cash and investments, lease liabilities, minority interest and diluted shares

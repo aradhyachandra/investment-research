@@ -14,6 +14,16 @@ primary_accounting_standard: Ind AS
 # Periods are listed explicitly with real dates. Nothing is inferred from labels.
 # Quarter-label resolution (e.g. "Q2 FY26") arrives in M2 (periods.py).
 periods:
+  - label: FY23               # D3: only from the FY24 report's comparatives (no FY23 report loaded)
+    period_type: FY
+    fiscal_year: 2023
+    start_date: "2022-04-01"
+    end_date: "2023-03-31"
+  - label: FY24               # D3
+    period_type: FY
+    fiscal_year: 2024
+    start_date: "2023-04-01"
+    end_date: "2024-03-31"
   - label: FY25
     period_type: FY
     fiscal_year: 2025
@@ -76,6 +86,38 @@ sources:
       - {pdf_pages: [8, 10], first_printed: 8}
       - {pdf_pages: [12, 12], first_printed: 12}
       - {pdf_pages: [14, 23], first_printed: 14}
+  # D3 additions. Appended at the end on purpose: source_ids follow this order, and the existing
+  # Chroma index and eval gold sources use source_id 1 (AR FY26) and 2 (fact sheet).
+  - file_name: tcs_annual_report_FY25.pdf
+    doc_type: annual_report
+    title: TCS Integrated Annual Report 2024-25
+    publisher: Tata Consultancy Services Limited
+    url: null
+    published_date: null       # TO VERIFY: not recorded (statements signed "Mumbai, April 10, 2025")
+    period_covered: FY25
+    accounting_standard: Ind AS  # consolidated and standalone statements are Ind AS
+    retrieved_on: "2026-10-10" # TO VERIFY: taken from the PDF's file date on disk
+    licence_note: null         # TO VERIFY
+    # Single pages; the printed number sits in the page HEADER (top corner), not the footer.
+    # PDF 4-332 print 2-330 (PDF index - 2); PDF 1-3 (covers, contents) and 333-336 print none.
+    # Read by Claude from every page's header, cross-checked by tests/test_d3_history.py. Some
+    # digits come out as other glyphs in the text layer (e.g. "1Ϭ3" for 103). TO VERIFY (author).
+    page_labels:
+      - {pdf_pages: [4, 332], first_printed: 2}
+  - file_name: tcs_annual_report_FY24.pdf
+    doc_type: annual_report
+    title: TCS Integrated Annual Report 2023-24
+    publisher: Tata Consultancy Services Limited
+    url: null
+    published_date: null       # TO VERIFY: not recorded (statements signed "Mumbai, April 12, 2024")
+    period_covered: FY24
+    accounting_standard: Ind AS
+    retrieved_on: "2026-10-10" # TO VERIFY: taken from the PDF's file date on disk
+    licence_note: null         # TO VERIFY
+    # Single pages, number in the page HEADER. PDF 3-336 print 3-336 (same as the PDF index);
+    # PDF 1-2 and 337-340 print none. Cross-checked as above. TO VERIFY (author).
+    page_labels:
+      - {pdf_pages: [3, 336], first_printed: 3}
 
 # Plausibility bands, in each metric's canonical unit. A value outside its band is
 # rejected at load time. Bands are set roughly 2-3x around TCS's actual scale so a
@@ -100,6 +142,7 @@ plausibility_bands:
   exceptional_restructuring_expenses: {min: 0, max: 15000}
   exceptional_labour_codes_impact:    {min: 0, max: 15000}
   exceptional_legal_claim_provision:  {min: 0, max: 15000}
+  exceptional_legal_claim_settlement: {min: 0, max: 15000}   # D3 (FY24 report line)
   profit_before_tax:       {min: 20000,  max: 180000}
   tax_expense:             {min: 5000,   max: 50000}
   total_assets:            {min: 60000,  max: 500000}
@@ -139,6 +182,14 @@ cross_foot_checks:
       - {metric: exceptional_restructuring_expenses, sign: -1}
       - {metric: exceptional_labour_codes_impact, sign: -1}
       - {metric: exceptional_legal_claim_provision, sign: -1}
+  # D3: the FY24 and FY25 reports print ONE exceptional line ("Settlement of legal claim") instead of
+  # the FY26 report's three, so their profit before tax foots with that line. Each identity runs only
+  # where all its figures are in the same document, so the two layouts never mix.
+  - name: profit_before_tax_single_exceptional_line
+    total: profit_before_tax
+    parts:
+      - {metric: profit_before_exceptional_items_and_tax, sign: 1}
+      - {metric: exceptional_legal_claim_settlement, sign: -1}
   - name: total_equity
     total: total_equity
     parts:

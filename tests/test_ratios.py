@@ -253,7 +253,9 @@ def test_ratios_defined_in_config():
     assert set(ratios) == {"net_margin", "revenue_growth_yoy", "net_profit_growth_yoy", "eps_growth_yoy",
                            # D1 (tests/test_d1_facts.py)
                            "operating_margin", "effective_tax_rate", "return_on_equity", "capex_to_revenue",
-                           "ocf_to_profit", "da_to_revenue"}
+                           "ocf_to_profit", "da_to_revenue",
+                           # D3 (tests/test_d3_history.py)
+                           "revenue_cagr_3y"}
     assert ratios["net_margin"]["numerator"] == "profit_attributable_to_owners"
     assert ratios["net_profit_growth_yoy"]["metric"] == "profit_attributable_to_owners"
     assert ratios["eps_growth_yoy"]["metric"] == "eps_basic"
@@ -295,7 +297,7 @@ def test_config_with_unknown_metric_is_rejected(tmp_path):
 
 
 def test_config_with_unknown_kind_is_rejected(tmp_path):
-    path = _write_ratios(tmp_path, lambda r: r["net_margin"].update(kind="cagr"))
+    path = _write_ratios(tmp_path, lambda r: r["net_margin"].update(kind="moving_average"))
     with pytest.raises(ConfigError, match="kind"):
         load_ratios(path, METRICS_CONFIG)
 

@@ -1,7 +1,7 @@
 """Company snapshot tab (M8.1): headline figure cards built from the existing tools.
 
 Every value comes from get_financial_fact / compute_ratio through the agent's tool layer (run_tool),
-formatted by the tool layer. Nothing is typed in and nothing is computed here. Which figures appear is
+formatted by the tool layer. Since D3 each card can also carry a short trend (config `trend_periods`). Nothing is typed in and nothing is computed here. Which figures appear is
 config (config/ui.yaml `snapshot`), not code.
 
 compute_ratio writes an audit row (computed_metric) on every call. So the page never writes to the
@@ -22,6 +22,16 @@ class SnapshotError(RuntimeError):
     pass
 
 
+class TrendPoint(BaseModel):
+    """One year of a card's trend (D3). display and value come from the tool layer; both are None
+    when the tool could not give a figure for that period, and error says why."""
+    period: str
+    display: str | None = None
+    value: float | None = None
+    verified: bool = False            # every fact behind this point has verified_by
+    error: str | None = None
+
+
 class SnapshotCard(BaseModel):
     label: str
     period: str
@@ -33,6 +43,7 @@ class SnapshotCard(BaseModel):
     verified_by: str | None = None    # from the database's verified_by, if every fact behind the figure has one
     verified_line: str = ""
     error: str | None = None
+    trend: list[TrendPoint] = []      # config `trend_periods`, oldest first; empty if not configured
 
 
 def readonly_copy(db_path) -> sqlite3.Connection:
@@ -91,6 +102,21 @@ def _main_number(r: ToolResult):
     return r.numbers[0]                   # fact: the value; ratio: the ratio (inputs follow it)
 
 
+def trend_points(card: dict, periods: list[str], basis: str, env: ToolEnv) -> list[TrendPoint]:
+    """The card's figure for each period, through the same tools. A period with no figure is kept
+    with its error, never filled in."""
+    out = []
+    for period in periods:
+        r = _call(card, period, basis, env)
+        if not r.ok:
+            out.append(TrendPoint(period=period, error=f"{period}: {r.error}"))
+            continue
+        n = _main_number(r)
+        out.append(TrendPoint(period=period, display=n.display, value=n.value,
+                              verified=all(f.get("verified") for f in _facts(r))))
+    return out
+
+
 def build_card(card: dict, cfg: dict, env: ToolEnv, ui_cfg: dict) -> SnapshotCard:
     period, compare, basis = cfg["period"], cfg["compare_period"], cfg.get("basis", "consolidated")
     now, before = _call(card, period, basis, env), _call(card, compare, basis, env)
@@ -110,7 +136,8 @@ def build_card(card: dict, cfg: dict, env: ToolEnv, ui_cfg: dict) -> SnapshotCar
     return base.model_copy(update={
         "current": _main_number(now).display, "compare": _main_number(before).display if before.ok else None,
         "change": change, "citations": citations, "verified_by": who, "verified_line": line,
-        "error": None if before.ok else f"{compare}: {before.error}"})
+        "error": None if before.ok else f"{compare}: {before.error}",
+        "trend": trend_points(card, cfg.get("trend_periods") or [], basis, env)})
 
 
 def build_snapshot(env: ToolEnv, cfg: dict, ui_cfg: dict) -> list[SnapshotCard]:

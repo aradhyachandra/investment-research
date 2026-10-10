@@ -12,6 +12,10 @@
 # kind: yoy_growth  value = (current - prior_year) / prior_year x multiplier
 #       fields: metric (metric_id), multiplier. prior_year = same period type one fiscal
 #       year earlier (FY26 -> FY25, Q2 FY27 -> Q2 FY26). Refuses a zero or negative base.
+# kind: cagr        value = ((current / base) ^ (1 / years) - 1) x multiplier   (D3)
+#       fields: metric (metric_id), years (whole number >= 1), multiplier. base = same period
+#       type `years` fiscal years earlier (FY26, years 3 -> FY23). Refuses if either end is
+#       missing, zero or negative.
 #
 # Every ratio also has: display_name, formula_version (bump it when the definition
 # changes, so old computed_metric rows stay interpretable), unit, definition.
@@ -176,3 +180,22 @@ ratios:
       Depreciation and amortisation expense divided by revenue from operations, same period, as
       a percentage. Basis: statutory, not affected by exceptional items. Note: TCS's own
       headline margins in its fact sheets exclude exceptional items.
+
+  # ---------- D3 additions ----------
+
+  revenue_cagr_3y:
+    display_name: Revenue CAGR (3 years)
+    kind: cagr
+    metric: revenue_from_operations
+    years: 3
+    multiplier: 100
+    unit: PERCENT
+    formula_version: revenue_cagr_3y.v1
+    definition: >-
+      Compound annual growth rate of revenue from operations over the three fiscal years ending in
+      the period asked for (FY26: from FY23 to FY26), as a percentage: (revenue at the end / revenue
+      three years earlier) to the power 1/3, minus 1. Reported rupee figures, not constant currency.
+      Uses only the two end years. Basis: statutory; revenue is not affected by exceptional items.
+      Needs the year three years earlier in the database (today FY23 is the earliest year,
+      so only FY26 can be computed). Note: TCS's own headline margins in its fact sheets exclude
+      exceptional items.

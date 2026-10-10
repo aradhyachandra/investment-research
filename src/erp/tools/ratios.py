@@ -1,7 +1,7 @@
 """compute_ratio: deterministic ratios from stored facts. No LLM inside.
 
 Which metrics a ratio uses is defined in config/ratios.yaml. This module only knows how
-to do the two kinds of arithmetic (quotient, year-on-year growth), fetch inputs with
+to do three kinds of arithmetic (quotient, year-on-year growth, compound annual growth), fetch inputs with
 get_financial_fact, and record every result as a computed_metric row (formula, input
 fact_ids, git SHA). A ratio is verified only if every input fact is verified.
 
@@ -26,7 +26,7 @@ RATIOS_CONFIG = REPO / "config" / "ratios.yaml"
 METRICS_CONFIG = REPO / "config" / "metrics.yaml"
 
 COMMON_FIELDS = ("display_name", "kind", "multiplier", "unit", "formula_version", "definition")
-KIND_FIELDS = {"quotient": ("numerator", "denominator"), "yoy_growth": ("metric",)}
+KIND_FIELDS = {"quotient": ("numerator", "denominator"), "yoy_growth": ("metric",), "cagr": ("metric", "years")}
 
 
 class RatioError(ValueError):
@@ -90,6 +90,9 @@ def load_ratios(path: Path = RATIOS_CONFIG, metrics_config: Path = METRICS_CONFI
                 raise ConfigError(f"ratio {ratio_id!r} missing field {field!r}")
             if r["kind"] == "quotient":
                 _check_operand(ratio_id, field, r[field], metric_ids, metrics_config)
+            elif field == "years":
+                if type(r["years"]) is not int or r["years"] < 1:
+                    raise ConfigError(f"ratio {ratio_id!r}: years must be a whole number of at least 1, got {r['years']!r}")
             elif r[field] not in metric_ids:
                 raise ConfigError(f"ratio {ratio_id!r}: {field} {r[field]!r} is not a metric in {metrics_config}")
     return ratios
@@ -130,6 +133,14 @@ def growth_percent(current: float, prior: float, multiplier: float = 100) -> flo
         # Growth over a zero or negative base has no meaningful sign or size.
         raise RatioError(f"prior-year base is {prior}; growth needs a positive base")
     return (current - prior) / prior * multiplier
+
+
+def cagr_percent(current: float, base: float, years: int, multiplier: float = 100) -> float:
+    """Compound annual growth: ((current / base) ^ (1 / years) - 1) x multiplier."""
+    if base <= 0 or current <= 0:
+        # A ratio of a non-positive figure has no real n-th root with a meaningful growth reading.
+        raise RatioError(f"CAGR needs positive figures at both ends, got base {base} and current {current}")
+    return ((current / base) ** (1 / years) - 1) * multiplier
 
 
 def _operand(spec, role: str, label: str, fact, prior_of) -> Operand:
@@ -184,6 +195,16 @@ def compute_ratio(conn: sqlite3.Connection, ticker: str, ratio_id: str, period_l
         formula = f"{num.formula} / {den.formula} * {r['multiplier']}"
         extra = dict(numerator_value=num.value, denominator_value=den.value,
                      numerator_label=r.get("numerator_label"), denominator_label=r.get("denominator_label"))
+    elif r["kind"] == "cagr":
+        m, years = r["metric"], r["years"]
+        cur = fact(m, period_label)
+        label = base_label = cur.period_label
+        for _ in range(years):
+            base_label = prior_year_label(base_label, fy_end_month)
+        base = fact(m, base_label)
+        value = cagr_percent(cur.value, base.value, years, r["multiplier"])
+        inputs = [RatioInput(role="current", fact=cur), RatioInput(role=f"base ({years} years earlier)", fact=base)]
+        formula = f"(({m}[{label}] / {m}[{base_label}]) ^ (1 / {years}) - 1) * {r['multiplier']}"
     else:  # yoy_growth
         m = r["metric"]
         cur = fact(m, period_label)

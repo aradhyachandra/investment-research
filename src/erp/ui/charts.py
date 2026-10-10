@@ -1,4 +1,4 @@
-"""Altair charts for the DCF and Evaluation tabs (M8.1). Each function takes display records
+"""Altair charts for the DCF and Evaluation tabs (M8.1) and the snapshot trend lines (D3). Each function takes display records
 (dcf_view / eval_view) and returns a chart; no figures are computed here.
 
 Colours: a validated colour-blind-safe set (light surface): blue, orange, aqua. A heatmap uses one
@@ -9,6 +9,7 @@ import pandas as pd
 
 from erp.ui.dcf_view import HeatCell, ScenarioBar, WaterfallStep
 from erp.ui.eval_view import EvalRow
+from erp.ui.snapshot import TrendPoint
 
 BLUE, ORANGE, AQUA = "#2a78d6", "#eb6834", "#1baf7a"
 INK, MUTED = "#1a1d24", "#52514e"
@@ -20,6 +21,20 @@ def _style(chart: alt.Chart) -> alt.Chart:
                                  titleColor=MUTED, labelFontSize=12, titleFontSize=12, titleFontWeight="normal")
             .configure_view(stroke=None)
             .configure_legend(labelColor=MUTED, titleColor=MUTED, orient="top"))
+
+
+def trend_chart(points: list[TrendPoint]) -> alt.Chart:
+    """Small line for a snapshot card's trend (D3). Only points the tools returned a value for."""
+    df = pd.DataFrame([{"Period": p.period, "Value": p.value, "Label": p.display}
+                       for p in points if p.value is not None])
+    base = alt.Chart(df).encode(
+        x=alt.X("Period:N", sort=list(df["Period"]) if len(df) else None, title=None,
+                axis=alt.Axis(labelAngle=0)),
+        # Axis from zero: a cropped axis makes a 0.6-point margin move look like a collapse.
+        y=alt.Y("Value:Q", title=None, scale=alt.Scale(zero=True), axis=None),
+        tooltip=[alt.Tooltip("Period:N"), alt.Tooltip("Label:N", title="Value")])
+    line = base.mark_line(color=BLUE, point=alt.OverlayMarkDef(color=BLUE, size=36))
+    return _style(line.properties(height=70))
 
 
 def scenario_chart(bars: list[ScenarioBar]) -> alt.Chart:

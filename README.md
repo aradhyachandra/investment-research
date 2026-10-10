@@ -8,8 +8,8 @@ Consultancy Services (TCS) with figures that carry a source page or a calculatio
 > decisions. DCF outputs are what a set of stated assumptions implies, not a
 > prediction.
 >
-> **v1 covers TCS only** (consolidated Ind AS figures from the FY26 annual report, plus the Q1 FY27
-> fact sheet as a document).
+> **v1 covers TCS only** (consolidated Ind AS figures for FY23-FY26 from the FY26, FY25 and FY24
+> annual reports, plus the Q1 FY27 fact sheet as a document).
 >
 > **Design principle: AI interprets, code calculates, sources prove.**
 
@@ -93,15 +93,16 @@ in this repository: they live in a separate private data repository checked out 
 is the same file. The download URLs were not recorded (TO VERIFY; `url: null` in
 `config/companies/tcs.yaml`), so this README does not give links.
 
-**How facts were entered.** `data/manual/financials_tcs.csv` holds 52 facts for FY25 and FY26 (26
+**How facts were entered.** `data/manual/financials_tcs.csv` holds 154 facts for FY23-FY26 (28
 metrics from the income statement, balance sheet, cash flow statement and share capital note), each
-with the PDF page and printed page. All were read from the FY26 annual report by an AI assistant and
-are loaded with `entry_method = llm_extracted`. The 12 original sample facts (also in
-`data/sample/facts_sample.csv`: revenue, profit after tax, profit attributable to shareholders,
-basic EPS, cash and cash equivalents, total equity) were verified by the author on 2026-10-07; the
-40 added in D1 are **not yet verified by a human** (the loader prints the count). The fuller
-dataset the plan calls for (FY21 onwards, quarters, hand-keyed and double-checked) does not exist
-yet.
+with the PDF page and printed page. All were read from the annual reports by an AI assistant and
+are loaded with `entry_method = llm_extracted`. The 54 read from the FY26 annual report (FY26 and
+its FY25 comparatives) were verified by the author on 2026-10-07 and 2026-10-08. The 100 added in
+D3 from the FY25 and FY24 annual reports (FY25, FY24 and FY23) are **not yet verified by a human**
+(the loader prints the count). When two reports print the same figure, the report for that year is
+the primary source and the other is a cross-check; every pair agreed. FY23 comes only from the FY24
+report's comparatives. The fuller dataset the plan calls for (FY21 onwards, quarters, hand-keyed
+and double-checked) does not exist yet.
 
 **Checks at load time** (`src/erp/db/validate.py`): unit must be the metric's canonical unit, value
 must equal reported value times the conversion factor, every fact needs a source page, plausibility
@@ -394,7 +395,7 @@ scripts/clean_clone_check.sh --worktree
 README.md  PROJECT_PLAN.md  PROGRESS.md  NOTES.md  CLAUDE.md / AGENTS.md (instructions for coding tools)
 config/            company, metrics, ratios, DCF, ingest, agent, eval and UI settings (no code)
 data/
-  manual/          financials_tcs.csv (52 facts, AI-read; 12 verified by the author), dcf_inputs.yaml
+  manual/          financials_tcs.csv (154 facts FY23-FY26, AI-read; 54 verified by the author), dcf_inputs.yaml
   sample/          facts_sample.csv (the original 12 facts, verified by the author)
   raw/             private data repo checkout with the PDFs (gitignored)
   db/, chroma/     local SQLite database and vector index (gitignored, rebuilt by commands above)

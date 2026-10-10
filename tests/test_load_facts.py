@@ -80,7 +80,7 @@ def test_source_documents_seeded_with_hashes(conn):
     rows = conn.execute(
         "SELECT local_path, sha256, doc_type, url FROM source_document ORDER BY source_id"
     ).fetchall()
-    assert len(rows) == 2
+    assert len(rows) == 4          # D3 added the FY25 and FY24 annual reports
     for local_path, sha, doc_type, url in rows:
         assert sha == expected[local_path.rsplit("/", 1)[-1]]
         assert url is None
@@ -93,7 +93,7 @@ def test_metrics_seeded_from_config(conn):
         "revenue_from_operations", "profit_after_tax", "profit_attributable_to_owners",
         "eps_basic", "total_equity", "cash_and_equivalents",
     } <= ids
-    assert len(ids) == 6 + 21      # D1 added 21 metrics (tests/test_d1_facts.py NEW_METRICS)
+    assert len(ids) == 6 + 21 + 1  # D1 added 21 metrics (tests/test_d1_facts.py NEW_METRICS); D3 one
     defs = dict(conn.execute("SELECT metric_id, definition FROM metric"))
     assert "profit for the year, including non-controlling interests" in defs["profit_after_tax"]
     owners = " ".join(defs["profit_attributable_to_owners"].split()).lower()
@@ -168,7 +168,7 @@ def test_rejects_unknown_metric(conn, ctx, good_row):
 
 
 def test_rejects_unknown_period(conn, ctx, good_row):
-    good_row["period"] = "FY24"  # not configured, so it has no real dates
+    good_row["period"] = "FY22"  # not configured, so it has no real dates (FY23 is the earliest since D3)
     assert_rejected(conn, ctx, [good_row], "unknown period")
 
 

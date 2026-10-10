@@ -19,7 +19,8 @@ How a PDF becomes chunks:
 
 Printed page numbers come from config (page_labels), not from the page footer: in the TCS
 report some footer digits are missing from the PDF text layer ("90" reads as "9"). The footer
-is still read and compared with the config, and disagreements are reported.
+(and, since D3, the page header, where the FY25 and FY24 reports print it) is still read and
+compared with the config, and disagreements are reported.
 
 Chunk text is for qualitative questions only. Numbers in it can be mangled by extraction
 (e.g. "2, 7 1, 423"); figures always come from SQLite, never from chunk text.
@@ -123,7 +124,17 @@ def _read_lines(page, clip, header_band, footer_band) -> list:
 
 def _footer_numbers(page, clip, footer_band) -> list:
     """Digit groups printed in the footer band near the left edge, right edge or centre."""
-    band = pymupdf.Rect(clip.x0, clip.y1 - footer_band, clip.x1, clip.y1)
+    return _band_numbers(page, clip, pymupdf.Rect(clip.x0, clip.y1 - footer_band, clip.x1, clip.y1))
+
+
+def _page_numbers(page, clip, footer_band, header_band) -> list:
+    """Digit groups in the footer band, then in the header band. The FY26 report prints its page
+    numbers in the footer; the FY25 and FY24 reports print them in the page header (D3)."""
+    header = pymupdf.Rect(clip.x0, clip.y0, clip.x1, clip.y0 + header_band)
+    return _footer_numbers(page, clip, footer_band) + _band_numbers(page, clip, header)
+
+
+def _band_numbers(page, clip, band) -> list:
     chars = set()
     for block in page.get_text("rawdict", clip=band)["blocks"]:
         for line in block.get("lines", []):
@@ -133,14 +144,16 @@ def _footer_numbers(page, clip, footer_band) -> list:
                     near = (x0 - clip.x0 < 110 or clip.x1 - x0 < 110
                             or abs(x0 - (clip.x0 + clip.x1) / 2) < 60)
                     if ch["c"].isdigit() and near:
-                        chars.add((round(x0, 1), ch["c"]))
-    groups, last_x = [], None
-    for x, c in sorted(chars):
-        if last_x is not None and x - last_x < 12:
+                        # Row = rounded baseline: digits only join within one printed line, so a
+                        # body-text digit just below a header page number is not glued onto it (D3).
+                        chars.add((round(ch["bbox"][3] / 3), round(x0, 1), ch["c"]))
+    groups, last = [], None
+    for row, x, c in sorted(chars):
+        if last is not None and row == last[0] and x - last[1] < 12:
             groups[-1] += c
         else:
             groups.append(c)
-        last_x = x
+        last = (row, x)
     return groups
 
 
@@ -259,7 +272,8 @@ def extract_chunks(pdf_path, page_labels=None, settings=None) -> ExtractResult:
             for k, clip in enumerate(clips):
                 label = page_labels_here[k] if page_labels_here else ""
                 if label:
-                    w = _check_label(page_no, label, _footer_numbers(page, clip, pdf_cfg["footer_band"]))
+                    w = _check_label(page_no, label, _page_numbers(page, clip, pdf_cfg["footer_band"],
+                                                                  pdf_cfg["header_band"]))
                     if w:
                         warnings.append(w)
                 lines = _read_lines(page, clip, pdf_cfg["header_band"], pdf_cfg["footer_band"])

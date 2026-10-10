@@ -40,6 +40,9 @@ def main(db="data/db/sample.sqlite", ticker="TCS", ks=(5, 10)) -> int:
     ctx = company_context(ticker)
     probes = load_probes()
     hits = {k: 0 for k in ks}
+    # D3: with several annual reports indexed, show which report each top-5 result comes from.
+    period_of = dict(conn.execute("SELECT source_id, period_covered FROM source_document").fetchall())
+    from_other = 0
     for probe in probes:
         local_path = f"data/raw/{probe['source_file']}"
         source_id = conn.execute("SELECT source_id FROM source_document WHERE local_path = ?",
@@ -54,12 +57,15 @@ def main(db="data/db/sample.sqlite", ticker="TCS", ks=(5, 10)) -> int:
         print(f"{probe['id']} [{probe['topic']}] {'HIT @' + str(first_hit) if first_hit else 'MISS'}")
         print(f"    Q: {probe['question']}")
         print(f"    expected PDF page (printed): {expected}")
-        top = ", ".join(f"{r.page}{'*' if r.is_table_heavy else ''}({r.score:.3f})" for r in results[:5])
-        print(f"    top-5 PDF pages (score; * = table-heavy): {top}")
+        top = ", ".join(f"{period_of.get(r.source_id, r.source_id)}:{r.page}{'*' if r.is_table_heavy else ''}"
+                        f"({r.score:.3f})" for r in results[:5])
+        from_other += sum(r.source_id != source_id for r in results[:5])
+        print(f"    top-5 document:PDF page (score; * = table-heavy): {top}")
     n = len(probes)
     print()
     for k in ks:
         print(f"recall@{k}: {hits[k]} of {n} provisional probes")
+    print(f"top-5 results from a document other than the expected one: {from_other} of {5 * n}")
     print("PROVISIONAL baseline only: not the eval set, no threshold.")
     return 0
 

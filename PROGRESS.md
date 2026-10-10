@@ -1,5 +1,81 @@
 # PROGRESS
 
+## 2026-10-10 — D3: four years of history (FY23-FY26) from the FY25 and FY24 annual reports
+
+**Done** (tests first: `tests/test_d3_history.py`, 89 tests; written before the config, data and code)
+- Sources: `tcs_annual_report_FY25.pdf` (2024-25, 336 pages) and `tcs_annual_report_FY24.pdf`
+  (2023-24, 340 pages) appended to `config/companies/tcs.yaml` (source_ids 3 and 4; 1 and 2 unchanged),
+  `period_covered` FY25 / FY24, Ind AS, `page_labels` from the page headers (FY25: PDF 4-332 =
+  printed 2-330; FY24: PDF 3-336 = printed 3-336), sha256 in `sources_hashes.txt`. Periods FY23 and
+  FY24 added with real dates.
+- `data/manual/financials_tcs.csv` (author asked for this edit): 100 new rows, 25 metrics x
+  {FY25, FY24} from the FY25 report (PDF 180/181/184/202) and x {FY24, FY23} from the FY24 report (PDF
+  180/181/184/203). `entered_by = Claude`, verification blank, PDF page + printed page. The 54
+  signed-off rows untouched. The 21 D1 metrics plus the 6 original ones (minus the three FY26-only
+  exceptional lines, plus the new settlement line) = 25 per column.
+- `config/metrics.yaml`: new metric `exceptional_legal_claim_settlement` (the FY24/FY25 reports'
+  single exceptional line); `exceptional_legal_claim_provision` definition says how they differ.
+  Band added; new cross-foot `profit_before_tax_single_exceptional_line`.
+- Loader with all checks (`--raw-dir` hash checks, bands, cross-foots, duplicates): 154 facts, 100 not
+  verified. **No restatements**: all 49 figures printed in two reports agree. **No band widened.**
+- Ratios: every ratio computes for FY24-FY26; FY23 for the one-year ratios (growth and ROE refuse:
+  need FY22). New ratio kind `cagr` (`tools/ratios.py`, `cagr_percent`) and ratio `revenue_cagr_3y`
+  (FY26: 5.80%, hand-worked with bc). The compute_ratio tool marks CAGR as a growth number for the
+  verifier (`agent/tools.py`).
+- Ingest: page-number check reads the header as well as the footer, and joins digits only within one
+  printed line (`ingest/pdf_to_chunks.py`). Indexed: FY25 926 chunks, FY24 966 (3,030 total); 0 label
+  contradictions. Search evidence carries each document's period (tested).
+- Retrieval probes (`tests/run_provisional_probes.py` now prints each hit's document): see below.
+- UI: snapshot cards show a small FY23-FY26 trend line with the values written out and the
+  unverified years named (`ui/snapshot.py` TrendPoint, `ui/charts.py` trend_chart, `ui/app.py`,
+  `config/ui.yaml` `trend_periods`). Checked in the browser (demo mode).
+- Existing tests updated where they pinned the old config: `test_load_facts.py` (4 sources, 28
+  metrics, FY22 as the unknown period), `test_periods.py` (find FY25/FY26 by label),
+  `test_ratios.py` (ratio list; `cagr` no longer an unknown kind), `test_d1_facts.py` (`manual_rows()`
+  = the FY26-report rows it was written for).
+- Full suite without `tests/test_ollama_integration.py`: 850 passed (761 + 89), 87 s.
+- README: fact counts and year range brought up to date (it still said 52 facts / 12 verified).
+- Docs: `docs/D3_four_years_of_history.md`, `docs/D3_facts_for_review.md`, NOTES.md (D3).
+
+**Retrieval before / after** (12 PROVISIONAL probes, same queries, no tuning)
+
+| | before (FY26 report + fact sheet) | after (+ FY25, FY24 reports) |
+|---|---|---|
+| recall@5 | 9 of 12 | 9 of 12 |
+| recall@10 | 11 of 12 | 11 of 12 |
+| rank of expected page dropped | | 4 probes (PROV-01 1->4, 02 1->2, 04 1->2, 11 7->8) |
+| top-5 results from another document | | 32 of 60 |
+
+**Decisions**
+- New sources appended (source_id stability for Chroma and eval gold).
+- Settlement of legal claim = its own metric; no zero rows for lines a report does not print.
+- Shares from note 8(m) "Closing balance" (FY24 report PDF 203; FY25 report PDF 202), as in D1.
+- CAGR uses only the two end years; refuses non-positive ends; `years` is config.
+- Snapshot trend: values written out under the line; Y axis from zero.
+
+**Known issues / flags for the author** (details in NOTES.md D3)
+- FY25 lookups now cite the FY25 report (unverified until sign-off) instead of the signed-off FY26
+  comparative. FY25 eval gold sources cite the FY26 report, so numeric citation scores for EV-A02, A04,
+  A06, A08, A09, B02, C02 would drop. Eval not run; questions file not edited.
+- EV-G05 (dev) expects a decline for "3-year revenue CAGR to FY26"; it is now computable (5.80%).
+- Older reports now take over half the top-5 search slots on the probes; the agent does not prefer
+  the latest report. Not tuned (as asked).
+- FY24 year-end share count differs from the EPS weighted average (buy-back); DCF unaffected.
+
+**What to review**: `docs/D3_facts_for_review.md` (100 rows, ~30-40 min, decisions first), then the
+flags above.
+
+**Next**: author sign-off of the 100 rows; decide the eval gold questions above; commit when told.
+Nothing committed.
+
+**How to run**
+```
+PYTHONPATH=src .venv/bin/python -m erp.db.load_facts --csv data/manual/financials_tcs.csv --entry-method llm_extracted --replace --raw-dir data/raw
+PYTHONPATH=src .venv/bin/python -m erp.ingest.index_chroma --db data/db/sample.sqlite
+PYTHONPATH=src .venv/bin/python tests/run_provisional_probes.py
+PYTHONPATH=src:tests .venv/bin/pytest -q tests/test_d3_history.py
+```
+
 ## 2026-10-08 — D2: DCF base-year and bridge inputs from the facts database
 
 **Done** (tests first: `tests/test_dcf_db_inputs.py`, 42 tests; the 3 pinning tests were written and

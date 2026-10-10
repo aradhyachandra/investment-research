@@ -418,6 +418,16 @@ def _snapshot(db_path: str, mtime: float, ui_cfg: dict, agent_cfg: dict):
         conn.close()
 
 
+def _trend(card) -> None:
+    """Small line of the card's figure over the configured years (D3), with the values written out."""
+    st.altair_chart(charts.trend_chart(card.trend), width="stretch")
+    st.caption(" · ".join(md_escape(f"{p.period}: {p.display}" if p.display else f"{p.period}: not available")
+                          for p in card.trend))
+    unverified = [p.period for p in card.trend if p.display and not p.verified]
+    if unverified:
+        st.caption(f"Trend figures not yet checked by a human: {', '.join(unverified)}")
+
+
 def snapshot_tab(db_path: Path, ui_cfg: dict, agent_cfg: dict) -> None:
     cfg = ui_cfg["snapshot"]
     st.subheader(f"{cfg['period']} at a glance")
@@ -444,6 +454,8 @@ def snapshot_tab(db_path: Path, ui_cfg: dict, agent_cfg: dict) -> None:
                       delta_color="off", delta_arrow="off")
             if card.change:
                 st.caption(f"{md_escape(card.change)} (code-computed)")
+            if any(p.value is not None for p in card.trend):
+                _trend(card)
             chips = dict.fromkeys((c.badge, c.page_text or "no page") for c in card.citations)  # each page once
             st.markdown(" ".join(f":{chip_colour(b)}-badge[{md_escape(b)}] :{chip_colour(b)}-badge[{md_escape(page)}]"
                                  for b, page in chips))

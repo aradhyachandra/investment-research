@@ -126,8 +126,9 @@ def test_config_periods_agree_with_resolver(ctx):
 
 def test_config_period_with_calendar_dates_is_rejected(tmp_path):
     def calendar_fy25(cfg):
-        cfg["periods"][0]["start_date"] = "2025-01-01"  # FY25 typed as calendar 2025
-        cfg["periods"][0]["end_date"] = "2025-12-31"
+        fy25 = next(p for p in cfg["periods"] if p["label"] == "FY25")
+        fy25["start_date"] = "2025-01-01"  # FY25 typed as calendar 2025
+        fy25["end_date"] = "2025-12-31"
     path = _write_company_config(tmp_path, calendar_fy25)
     with pytest.raises(ConfigError, match="FY25"):
         load_context(path, METRICS_CONFIG, HASHES_FILE, raw_dir=None)
@@ -135,7 +136,7 @@ def test_config_period_with_calendar_dates_is_rejected(tmp_path):
 
 def test_config_period_with_wrong_fiscal_year_is_rejected(tmp_path):
     def wrong_year(cfg):
-        cfg["periods"][1]["fiscal_year"] = 2025
+        next(p for p in cfg["periods"] if p["label"] == "FY26")["fiscal_year"] = 2025
     path = _write_company_config(tmp_path, wrong_year)
     with pytest.raises(ConfigError, match="FY26"):
         load_context(path, METRICS_CONFIG, HASHES_FILE, raw_dir=None)
