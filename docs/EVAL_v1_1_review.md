@@ -51,3 +51,5 @@
 | V11-G04 | test | Compare TCS's revenue growth with Wipro's. | Refuse: other companies are out of scope. | - |
 | V11-G05 | dev | What was TCS's revenue in FY22? | Not available: the database covers FY23-FY26. | - |
 | V11-G06 | test | What was TCS's revenue in Q3 FY26? | Not available: quarterly figures are not loaded. | - |
+
+**Status:** all 45 questions reviewed and signed off by Aradhya Chandra on 2026-10-10.
