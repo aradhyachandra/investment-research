@@ -40,7 +40,9 @@ routing:
   check_period: [A, B, C]
   # History/trend questions (category H, v1.1): several numbers across years. Right tools = at
   # least one of these (a search_documents call may be added); right period = these calls cover
-  # two or more periods. The gold period of an H question is not checked (it names a range).
+  # every fiscal year from the first to the last one the question names ("from FY24 to FY26" ->
+  # FY24, FY25 and FY26; E3), or two or more periods if the question names fewer than two fiscal
+  # years. The gold period of an H question is not checked (it names a range).
   trend:
     H: [get_financial_fact, compute_ratio]
 

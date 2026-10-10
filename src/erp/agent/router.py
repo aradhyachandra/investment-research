@@ -21,6 +21,13 @@ Named metric (E2), decided by code: when the question uses exactly one metric's 
 display name, or the opening phrase of its definition) and the model's plan is plain fact lookups
 that use none of it, the lookups are replaced by that metric. Seen live (PDEV-07): "profit for the
 year, including non-controlling interests" -> profit_attributable_to_owners + non_controlling_interests.
+
+E3, decided by code (dev failures of the v1.1 eval, docs/E3_dev_fixes.md):
+- Named ratio: the same rule for a ratio's own name (V11-C05: "effective tax rate" -> two input facts).
+- A ratio that spans years (CAGR, year-on-year growth) is called once, for the period the question
+  names, not once per year of a range (V11-C11: a 3-year CAGR asked for FY23, FY24, FY25 and FY26).
+- A group of metrics named by its family name ("exceptional items", from display names "Exceptional
+  items - <line>") gets the stored facts of the group for the named year (V11-E01: a search only).
 """
 import json
 import re
@@ -57,6 +64,9 @@ class Catalog(BaseModel):
     metrics: dict[str, str]          # metric_id -> display name
     metric_definitions: dict[str, str] = {}   # metric_id -> definition (for names; not in the prompt)
     ratios: dict[str, str]           # ratio_id -> display name
+    ratio_definitions: dict[str, str] = {}    # ratio_id -> definition (for names; not in the prompt)
+    ratio_spans: dict[str, int] = {}          # ratio_id -> fiscal years it spans (growth 1, CAGR n); others absent
+    fact_periods: dict[str, dict[str, bool]] = {}   # metric_id -> {period label: value is not zero}, consolidated
     periods: list[str]               # labels with data in the database
     scenarios: list[str]             # DCF scenario names in the assumptions file ([] if none)
     doc_types: list[str]             # indexed document types
@@ -88,9 +98,19 @@ def build_catalog(conn: sqlite3.Connection, ticker: str, dcf_assumptions: Path) 
     if Path(dcf_assumptions).exists():
         with open(dcf_assumptions) as f:
             scenarios = list((yaml.safe_load(f) or {}).get("scenarios") or {})
+    fact_periods = {}
+    for m, label, value in conn.execute(
+            "SELECT f.metric_id, p.label, f.value FROM fact_current f JOIN period p USING (period_id)"
+            " WHERE f.company_id = ? AND f.basis = 'consolidated'", (company[0],)):
+        fact_periods.setdefault(m, {})[label] = fact_periods.get(m, {}).get(label, False) or value != 0
+    ratios = load_ratios()
+    spans = {k: 1 if r["kind"] == "yoy_growth" else int(r["years"])
+             for k, r in ratios.items() if r["kind"] in ("yoy_growth", "cagr")}
     return Catalog(company_name=company[1], ticker=ticker, metrics=metrics,
                    metric_definitions={m: d for m, _, d in rows},
-                   ratios={k: r["display_name"] for k, r in load_ratios().items()}, periods=periods,
+                   ratios={k: r["display_name"] for k, r in ratios.items()},
+                   ratio_definitions={k: r.get("definition", "") for k, r in ratios.items()},
+                   ratio_spans=spans, fact_periods=fact_periods, periods=periods,
                    scenarios=scenarios, doc_types=load_ingest_config()["indexable_doc_types"],
                    fiscal_year_end_month=company[2])
 
@@ -279,38 +299,70 @@ def metric_names(catalog: Catalog) -> dict[str, set[str]]:
     return out
 
 
-def metrics_named_in(question: str, catalog: Catalog) -> set[str]:
-    """Metrics whose own name appears in the question as whole words. Period mentions (with an "in",
-    "for" or "during" before them) are blanked first, so "profit for the year in FY26, including
-    non-controlling interests" still reads as one name. A name inside a longer matched name does not
-    count ("non-controlling interests" inside "profit for the year, including non-controlling interests")."""
+def ratio_names(catalog: Catalog) -> dict[str, set[str]]:
+    """Each ratio's own names, as for metrics: its display name without a bracketed qualifier
+    ("Operating margin (EBIT margin)" -> "operating margin"), and the opening phrase of its definition,
+    unless that phrase contains a metric's own name: ratio definitions open with the formula's input
+    ("Total tax expense ..." for the effective tax rate), and an input line does not name the ratio."""
+    metric_words = {n for names in metric_names(catalog).values() for n in names}
+    out = {}
+    for r, display in catalog.ratios.items():
+        names = {_words(re.sub(r"\([^)]*\)", " ", display))}
+        opening = _words(_definition_opening(catalog.ratio_definitions.get(r, "")))
+        if not any(f" {n} " in f" {opening} " for n in metric_words):
+            names.add(opening)
+        out[r] = {w for w in names if len(w.split()) >= 2}
+    return out
+
+
+def _question_words(question: str) -> str:
+    """The question in _words form, padded with spaces, with period mentions (and an "in", "for" or
+    "during" before them) blanked, so "profit for the year in FY26, including ..." reads as one name."""
     text = question
     for start, end in reversed(period_spans(question)):
         head = re.sub(r"\b(?:in|for|during)\s*$", "", text[:start], flags=re.I)
         text = head + " " + text[end:]
-    text = f" {_words(text)} "
-    found = []                                         # (start, end, metric)
-    for m, names in metric_names(catalog).items():
-        for name in names:
-            for hit in re.finditer(re.escape(f" {name} "), text):
-                found.append((hit.start(), hit.end(), m))
-    return {m for s, e, m in found
-            if not any(s2 <= s and e <= e2 and (e2 - s2) > (e - s) for s2, e2, _ in found)}
+    return f" {_words(text)} "
+
+
+def _name_hits(text: str, catalog: Catalog) -> list[tuple[int, int, str, str]]:
+    """(start, end, "metric"|"ratio", id) for each own name found in a _question_words text. A name
+    inside a longer found name does not count ("tax expense" inside "total tax expense" would not)."""
+    found = []
+    for kind, names_by_id in (("metric", metric_names(catalog)), ("ratio", ratio_names(catalog))):
+        for i, names in names_by_id.items():
+            for name in names:
+                for hit in re.finditer(re.escape(f" {name} "), text):
+                    found.append((hit.start(), hit.end(), kind, i))
+    return [(s, e, k, i) for s, e, k, i in found
+            if not any(s2 <= s and e <= e2 and (e2 - s2) > (e - s) for s2, e2, _, _ in found)]
+
+
+def names_in(question: str, catalog: Catalog) -> set[tuple[str, str]]:
+    """("metric", id) and ("ratio", id) for every metric or ratio the question names by its own name."""
+    return {(k, i) for _, _, k, i in _name_hits(_question_words(question), catalog)}
+
+
+def metrics_named_in(question: str, catalog: Catalog) -> set[str]:
+    """Metrics whose own name appears in the question as whole words (see names_in). A name inside a
+    longer matched name does not count ("non-controlling interests" inside "profit for the year,
+    including non-controlling interests", or a metric name inside a ratio's name)."""
+    return {i for k, i in names_in(question, catalog) if k == "metric"}
 
 
 def _use_named_metric(calls: list[ToolCall], qtype: str, question: str, catalog: Catalog,
                       problems: list[str]) -> list[ToolCall]:
-    """E2, decided by code: when the question names exactly one metric and the plan is a plain lookup
-    (question_type numeric, only fact calls), none of them for that metric, replace them with that
-    metric (one call per period, in order, keeping each period's basis). Anything else is left to the
-    model: two metrics named, a plan with a ratio or a search, a "mixed" or other question type (a
-    "why" question may fetch related lines on purpose), or the named metric already fetched."""
+    """E2, decided by code: when the question names exactly one metric (and no ratio) and the plan is
+    a plain lookup (question_type numeric, only fact calls), none of them for that metric, replace
+    them with that metric (one call per period, in order, keeping each period's basis). Anything else
+    is left to the model: two names, a plan with a ratio or a search, a "mixed" or other question
+    type (a "why" question may fetch related lines on purpose), or the named metric already fetched."""
     if qtype != "numeric" or not calls or any(c.tool != "get_financial_fact" for c in calls):
         return calls
-    named = metrics_named_in(question, catalog)
-    if len(named) != 1:
+    named = names_in(question, catalog)
+    if len(named) != 1 or next(iter(named))[0] != "metric":
         return calls
-    (metric,) = named
+    ((_, metric),) = named
     if any(c.args.get("metric_id") == metric for c in calls):
         return calls
     out, seen = [], set()
@@ -322,6 +374,139 @@ def _use_named_metric(calls: list[ToolCall], qtype: str, question: str, catalog:
     problems.append(f"router chose {', '.join(dict.fromkeys(c.args.get('metric_id') for c in calls))}; "
                     f"the question names {metric} ({catalog.metrics[metric]}), so code fetched that instead")
     return out
+
+
+def _use_named_ratio(calls: list[ToolCall], qtype: str, question: str, catalog: Catalog,
+                     problems: list[str]) -> list[ToolCall]:
+    """E3, decided by code, with the named-metric rule's safeguards: the question names exactly one
+    ratio (and no metric); the model's question type is numeric or ratio; every call is a fact or
+    ratio lookup; none computes the named ratio. Then the plan becomes compute_ratio for it, one call
+    per period of the plan, in order, keeping each period's basis."""
+    if qtype not in ("numeric", "ratio") or not calls or any(c.tool not in _DATA_TOOLS for c in calls):
+        return calls
+    named = names_in(question, catalog)
+    if len(named) != 1 or next(iter(named))[0] != "ratio":
+        return calls
+    ((_, ratio),) = named
+    if any(c.tool == "compute_ratio" and c.args.get("ratio_id") == ratio for c in calls):
+        return calls
+    out, seen = [], set()
+    for c in calls:
+        if c.args.get("period") in seen:
+            continue
+        seen.add(c.args.get("period"))
+        args = {"ratio_id": ratio, **{k: c.args[k] for k in ("period", "basis") if k in c.args}}
+        out.append(ToolCall(tool="compute_ratio", args=args))
+    chosen = dict.fromkeys(c.args.get("metric_id") or c.args.get("ratio_id") for c in calls)
+    problems.append(f"router chose {', '.join(map(str, chosen))}; the question names {ratio} "
+                    f"({catalog.ratios[ratio]}), so code computes that ratio instead")
+    return out
+
+
+def _one_period_for_span_ratios(calls: list[ToolCall], qtype: str, question: str, catalog: Catalog,
+                                problems: list[str]) -> list[ToolCall]:
+    """E3, decided by code: a ratio that spans years (growth: 1, a CAGR: its years) already covers the
+    range, so it is called once, for the period the question names: the only period named, or, when
+    exactly two fiscal years are named and they are the ratio's own span apart, the later one ("CAGR
+    from FY23 to FY26" -> FY26). Only for numeric/ratio questions. Not for two adjacent years and a
+    one-year ratio ("growth in FY25 and FY26" may compare two growth rates), nor for a range longer
+    than the span (a trend: one value per year is the point)."""
+    if qtype not in ("numeric", "ratio"):
+        return calls
+    named = [p for p in dict.fromkeys(periods_in(question)) if p in catalog.periods]
+    out = list(calls)
+    for key in dict.fromkeys((c.args.get("ratio_id"), c.args.get("basis")) for c in calls
+                             if c.tool == "compute_ratio" and c.args.get("ratio_id") in catalog.ratio_spans):
+        span = catalog.ratio_spans[key[0]]
+        target = None
+        if len(named) == 1:
+            target = named[0]
+        elif len(named) == 2 and span >= 2:
+            a, b = (resolve_period(p, catalog.fiscal_year_end_month) for p in named)
+            if a.period_type == b.period_type == "FY" and abs(a.fiscal_year - b.fiscal_year) == span:
+                target = max((a, b), key=lambda p: p.fiscal_year).label
+        group = [c for c in out if c.tool == "compute_ratio" and (c.args.get("ratio_id"), c.args.get("basis")) == key]
+        if target is None or [c.args.get("period") for c in group] == [target]:
+            continue
+        first = out.index(group[0])
+        out = [c for c in out if c not in group]
+        out.insert(first, ToolCall(tool="compute_ratio", args={**group[0].args, "period": target}))
+        problems.append(f"{key[0]} spans {span} year(s), so code called it once, for {target} (the period the "
+                        f"question names); the plan had {', '.join(str(c.args.get('period')) for c in group)}")
+    return out
+
+
+# A group mention after one of these words qualifies another line ("profit before exceptional
+# items"); it is not a question about the group.
+_GROUP_QUALIFIERS = ("before", "after", "excluding", "including", "ex", "net of")
+
+
+def _singular(words: str) -> str:
+    return re.sub(r"s$", "", words)
+
+
+def metric_groups(catalog: Catalog) -> dict[str, set[str]]:
+    """Groups of metrics, from display names of the form "<group> - <line>" (config/metrics.yaml):
+    group name in _words form, singular ("Exceptional items - ..." -> "exceptional item") -> its
+    metric_ids. A group needs two or more metrics."""
+    groups = {}
+    for m, display in catalog.metrics.items():
+        if " - " in display:
+            groups.setdefault(_singular(_words(display.split(" - ", 1)[0])), set()).add(m)
+    return {g: ms for g, ms in groups.items() if len(ms) >= 2}
+
+
+def _groups_asked_about(question: str, catalog: Catalog) -> list[str]:
+    """Groups the question asks about: the group name (singular or plural) as whole words, not inside
+    a metric's or ratio's own name, not after a qualifier word, and no member of the group named."""
+    text = _question_words(question)
+    hits = _name_hits(text, catalog)
+    named = {i for _, _, _, i in hits}
+    out = []
+    for group, members in metric_groups(catalog).items():
+        if named & members:
+            continue
+        for m in re.finditer(re.escape(f" {group}") + r"s? ", text):
+            inside = any(s <= m.start() + 1 and m.end() - 1 <= e for s, e, _, _ in hits)
+            qualified = any(text[:m.start() + 1].endswith(f" {q} ") for q in _GROUP_QUALIFIERS)
+            if not inside and not qualified:
+                out.append(group)
+                break
+    return out
+
+
+def _add_group_facts(calls: list[ToolCall], question: str, catalog: Catalog, max_calls: int,
+                     problems: list[str]) -> list[ToolCall]:
+    """E3, decided by code: a question about a group ("what was the exceptional item in FY24?") gets a
+    fact lookup for each member with a stored fact in each period the question names (with data):
+    the lines that are not zero, or, if all are zero, the zero lines, so the answer can say so from the
+    facts. The model's calls are kept (a search explains the item); if the plan is then too long, the
+    model's other lookups go first, then its searches. No period named -> nothing added (code does not
+    pick a year)."""
+    periods = [p for p in dict.fromkeys(periods_in(question)) if p in catalog.periods]
+    added = []
+    for group in _groups_asked_about(question, catalog):
+        for p in periods:
+            have = [m for m in sorted(metric_groups(catalog)[group]) if p in catalog.fact_periods.get(m, {})]
+            nonzero = [m for m in have if catalog.fact_periods[m][p]]
+            for m in nonzero or have:
+                if not any(c.tool == "get_financial_fact" and c.args.get("metric_id") == m
+                           and c.args.get("period") == p for c in calls + added):
+                    added.append(ToolCall(tool="get_financial_fact",
+                                          args={"metric_id": m, "period": p, "basis": "consolidated"}))
+        if added:
+            problems.append(f"the question asks about the group '{group}' for {', '.join(periods)}; code added "
+                            f"the stored lines: {', '.join(c.args['metric_id'] + ' ' + c.args['period'] for c in added)}")
+    if not added:
+        return calls
+    members = set().union(*metric_groups(catalog).values())
+    out = [*added, *calls]
+    for searches in (False, True):                     # the model's other lookups go first, then searches
+        for c in reversed(calls):
+            if len(out) > max_calls and (c.tool == "search_documents") == searches \
+                    and not (c.tool == "get_financial_fact" and c.args.get("metric_id") in members):
+                out.remove(c)
+    return out[:max_calls]
 
 
 # Tools whose period must have data in the database (explain_period needs none).
@@ -386,11 +571,14 @@ def route(question: str, catalog: Catalog, llm_fn, *, max_calls: int) -> RoutePl
             items[i] = {"tool": "search_documents", "query": c.get("query") or question}
             problems.append(f"router chose metric_id {NOT_LISTED}; the filings are searched instead")
     calls = _use_named_metric([_to_call(c) for c in items], qtype, question, catalog, problems)
+    calls = _use_named_ratio(calls, qtype, question, catalog, problems)
     set_search_year(calls, question, catalog)
     if not calls:
         return RoutePlan(**failed, problems=["router chose no tools and gave no refusal reason"])
     with_data = [p for p in dict.fromkeys(periods_in(question)) if p in catalog.periods]
     calls += _missing_years(calls, with_data, max_calls, problems)
+    calls = _one_period_for_span_ratios(calls, qtype, question, catalog, problems)
+    calls = _add_group_facts(calls, question, catalog, max_calls, problems)
     no_data = [c for c in calls if c.tool in _DATA_TOOLS and c.args.get("period") not in catalog.periods]
     if len(no_data) == len(calls):
         # Decided by code, not the model: every lookup is for a period with no data.

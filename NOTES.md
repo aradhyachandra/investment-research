@@ -2,6 +2,35 @@
 
 Open questions, TO VERIFY items, and validation TODOs. Newest first.
 
+## E3 v1.1 dev fixes (2026-10-10)
+
+- **Named ratio** (router, code): ratio names = display name minus brackets, plus the definition
+  opening only if it contains no metric name. All 11 current openings name an input, so only
+  display names count. Bracketed aliases ("EBIT margin", "(year on year)", "(3 years)") are not
+  names. TO VERIFY (author): should "EBIT margin" count as a name of operating_margin?
+- **Metric + ratio names found together** (`names_in`): the E2 metric rule now needs exactly one
+  name in total. A question naming a metric and a ratio is left to the model by both rules.
+- **Span rule**: growth (1 year) and CAGR (n years) called once for the named period. Two adjacent
+  FYs + a one-year growth ratio are NOT collapsed (ambiguous: one growth figure, or two to compare).
+  Applies to model type numeric/ratio; the model labelled the "why" question V11-F01 `ratio`, so the
+  rule fired there (FY23 dropped). TO VERIFY whether the rule should also skip "why" wording.
+- **Metric groups**: derived from display names "<group> - <line>"; today only "exceptional item"
+  (4 lines). Qualifier words that stop the rule: before, after, excluding, including, ex, net of.
+  A year whose lines are all zero (FY23, FY25) gets the zero lines (FY25: 4 calls, the search
+  dropped by the 4-call limit). Zero = printed "-" (metrics.yaml). Consolidated facts only.
+- **H scoring**: every FY from first to last named; quarters ignored; fewer than two FYs named ->
+  two or more periods (old rule).
+- **E routing rule conflicts with the group fix**: `routing.expected_tools.E = [search_documents]`
+  is an exact set, so V11-E01 (search + fact, correct answer) now scores routing wrong. Not changed.
+  TO VERIFY (author).
+- **Router does not expand ranges**: "from FY24 to FY26" gives FY24 + FY26 to `_missing_years`, never
+  FY25. V11-H01 therefore now fails the stricter H rule. Possible follow-up; not built.
+- **V11-F01 not fixed**: names no ratio; the group mention follows "before". A general fix would be a
+  different rule (e.g. a "why X lower than Y" question where X and Y differ by a group), not built.
+- **Composer variation**: V11-D01 wrote "INR 1,880.53" without "per share" this run (E2 run had it),
+  so the unit check failed. Same route and tool output. TO VERIFY why output varies at temperature 0.
+- Known limitations unchanged: V11-B01 (no unit conversion), V11-G03 (industry average not refused).
+
 ## E2 v1.1 evaluation prepared (2026-10-10)
 
 - **Question sets and folders**: `run_eval.py --questions F`. v1 (`eval/questions.jsonl`) keeps

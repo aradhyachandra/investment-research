@@ -1,5 +1,71 @@
 # PROGRESS
 
+## 2026-10-10 — E3: fix the v1.1 dev failures
+
+**Done** (`tests/test_e3_dev_fixes.py`, 39 tests, new phrasings in neither question file, checked
+by exact text; H-scoring tests seen failing before the scoring change)
+- Router (code, prompt unchanged; `src/erp/agent/router.py`):
+  1. Named ratio (`ratio_names`, `names_in`, `_use_named_ratio`): exactly one name in the question and
+     it is a ratio; type numeric/ratio; only fact/ratio calls; none for that ratio -> `compute_ratio`
+     per plan period, basis kept. Ratio definition openings that contain a metric name are not names
+     (so today only display names count). The E2 metric rule now also requires that no ratio is named.
+  2. Spanning ratios (`Catalog.ratio_spans` from ratios.yaml; `_one_period_for_span_ratios`): growth
+     or CAGR called once, for the only named period, or the later of two FYs exactly the span apart
+     (span >= 2). Numeric/ratio questions only.
+  3. Metric groups (`metric_groups`, `_add_group_facts`, `Catalog.fact_periods`): display names
+     "<group> - <line>"; a question about the group (not inside a metric name, not after
+     before/after/excluding/including/ex/net of, no member named) gets fact lookups for the members
+     stored for each named period with data (non-zero lines, or the zero lines if all are zero).
+     Model calls kept; trimmed to max_tool_calls (other lookups dropped first, then searches).
+- Scoring: H "period right" = every FY from the first to the last named
+  (`score.fiscal_years_in_range`; `config/eval.yaml` comment), else two or more periods as before.
+- B01 (unit) and G03 (industry average) left as known limitations.
+- Docs: `docs/E3_dev_fixes.md`; NOTES.md (E3).
+
+**Results**
+- Live routing, 20 provisional dev questions: **20 of 20** (unchanged). R2 probes unchanged (5/5/5/5;
+  recall@5 9, @10 11, latest 53 of 60). v1 guardrail phrasings 12 of 13 (same known miss).
+- v1.1 dev run `eval/results/v1_1/dev/20261010-195652_3339daff` (full + naive RAG, dirty tree on 3339daf),
+  before -> after (full): numeric **12 -> 13 of 16**; behaviour 20 -> 21 of 22; routing tools 17 -> 17 of 20;
+  tools and period 16 -> 16 of 20; unsupported 0 of 32 -> 0 of 31; verifier rejections 3 -> 2 of 20.
+  Naive RAG unchanged (2 of 16; 14 of 22).
+  Fixed: C05 (25.64%), C11 (one CAGR call, FY26), E01 (958 crore settlement answered).
+  Still failing: F01, B01, G03. New fails: E01 routing tools (E rule expects search only), H01 routing
+  period (FY25 missing, the stricter rule), D01 numeric (composer dropped "per share"; same route and
+  value; not caused by E3).
+- Tests, in batches: e3+router+eval_v1_1 120 passed (9 s); 9 files 294 (17 s); 10 files 388 (81 s);
+  9 files 110 passed, 2 skipped (25 s); ui + ui_polish 84 (40 s). **Total 996 passed, 2 skipped, 0 failed.**
+
+**Decisions**
+- Group names come from display names (no new config field or schema change).
+- Two adjacent years with a one-year growth ratio are not collapsed (may compare two growth rates).
+- No period named -> the group rule adds nothing (code does not pick a year).
+- E rule in `config/eval.yaml` not changed to accept facts (would be changing the scorer to fit the fix).
+
+**Known issues / flags for the author**
+- **F01 is not fixed and the brief's rule 1 cannot fix it**: the question names no ratio. The span rule
+  also fired on it (the model labelled it `ratio`), so the plan lost FY23; still the wrong figure either way.
+- E01 now answers correctly but scores "routing tools wrong" (search + fact vs search only). Decide
+  whether E should allow added facts.
+- H01 now scores routing period wrong: the router does not fill middle years of a named range.
+  A possible fix: `_missing_years` expands "from FYa to FYb" ranges. Not built (not in the brief).
+- D01: composer output varied between runs at temperature 0 (TO VERIFY).
+- Test count: 998 collected now (996 passed + 2 skipped) = 959 collected before E3 + 39 new. E2's
+  "959 passed, 2 skipped" was the collected total; it was 957 passed.
+
+**What to review**: `docs/E3_dev_fixes.md`; in `router.py` `ratio_names`, `_use_named_ratio`,
+`_one_period_for_span_ratios`, `metric_groups` / `_groups_asked_about` / `_add_group_facts`;
+`fiscal_years_in_range` in `src/erp/eval/score.py`; the E-routing and H01 questions above.
+
+**Next**: author review; commit when told.
+
+**How to run**
+```
+PYTHONPATH=src:tests .venv/bin/pytest -q tests/test_e3_dev_fixes.py tests/test_router.py tests/test_eval_v1_1.py
+PYTHONPATH=src:tests .venv/bin/python tests/run_provisional_dev.py --route-only
+PYTHONPATH=src .venv/bin/python eval/run_eval.py --questions eval/questions_v1_1.jsonl --systems full naive_rag
+```
+
 ## 2026-10-10 — E2: prepare the v1.1 evaluation
 
 **Done** (tests first: `tests/test_eval_v1_1.py` 18 tests, 18 new in `tests/test_router.py`; seen

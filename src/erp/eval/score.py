@@ -13,7 +13,8 @@
                      only the claims that match the gold value.
   behaviour          answered / partial / refuse / not_available / error (config/eval.yaml).
   routing            coarse: the set of tools used vs the category's expected set (config). Trend
-                     questions (H): fact/ratio tools, covering two or more periods.
+                     questions (H): fact/ratio tools, covering every fiscal year in the range the
+                     question names (E3), or two or more periods if it names no range.
   unsupported        numeric claims with no evidence (claims.py `supported`).
   verifier           rejected = the verifier failed the composed text and the template shipped;
                      would_reject = the verifier failed it (recorded also when it is switched off).
@@ -72,6 +73,15 @@ def classify_behavior(answer: Answer, ecfg: dict | None = None) -> str:
     return "partial" if numeric_claims_in_text(answer.answer_text) else "not_available"
 
 
+def fiscal_years_in_range(question: str) -> set[str]:
+    """Every fiscal year label from the first to the last fiscal year the question names ("from FY24 to
+    FY26" -> FY24, FY25, FY26); empty if it names fewer than two fiscal years. Quarters are ignored."""
+    years = sorted({k[0] for k in map(period_key, periods_in(question)) if k and k[1] == 5})
+    if len(years) < 2:
+        return set()
+    return {f"FY{y:02d}" for y in range(years[0], years[-1] + 1)}
+
+
 def routing_check(q: EvalQuestion, answer: Answer, ecfg: dict | None = None) -> tuple[bool, bool] | None:
     """(tools right, tools and period right), or None when this question/system is not scored."""
     rules = (ecfg or load_eval_config())["routing"]
@@ -90,11 +100,13 @@ def routing_check(q: EvalQuestion, answer: Answer, ecfg: dict | None = None) -> 
         return (False, False)
     if trend is not None:
         # Several numbers across years (category H): data tools from the list (a search may be added),
-        # and "period right" = those calls cover two or more periods.
+        # and "period right" = those calls cover every fiscal year in the named range, or two or more
+        # periods when the question names no range.
         tools = {c.tool for c in plan.calls}
         tools_ok = bool(tools & set(trend)) and tools <= {*trend, "search_documents"}
         periods = {c.args.get("period") for c in plan.calls if c.tool in trend}
-        return (tools_ok, tools_ok and len(periods) >= 2)
+        needed = fiscal_years_in_range(q.question)
+        return (tools_ok, tools_ok and (needed <= periods if needed else len(periods) >= 2))
     tools_ok = {c.tool for c in plan.calls} == set(expected)
     period_ok = tools_ok
     if tools_ok and q.category in rules["check_period"] and q.gold_period and period_key(q.gold_period):
