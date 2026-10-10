@@ -449,5 +449,8 @@ Illustrative analysis, not investment advice. Nothing here is a recommendation a
 and no output is a price target or a valuation verdict. Figures may contain errors; see
 section 8 for what has and has not been verified.
 
-Code licence: none chosen yet (no LICENSE file; author to decide, keeping in mind that PyMuPDF is
-AGPL-3.0, TO VERIFY). TCS filings are the property of their publisher and are not included.
+Code licence: MIT for this repository's own code (see `LICENSE`). Third-party packages keep their
+own licences; in particular PyMuPDF (used for PDF reading) is AGPL-3.0, so anyone redistributing a
+combined application should check its terms (TO VERIFY; not legal advice). The local model
+qwen2.5:3b has its own licence (see section 8). TCS filings are the property of their publisher and
+are not included.
