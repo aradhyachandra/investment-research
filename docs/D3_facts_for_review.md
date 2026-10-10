@@ -208,3 +208,5 @@ Then `PYTHONPATH=src:tests .venv/bin/pytest -q tests/test_d3_history.py`: three 
 verified" for these rows (`test_new_rows_are_claude_entries_not_yet_verified_with_both_pages`,
 `test_whole_csv_loads_with_all_checks`, and the `verified is False` checks in the ratio and
 snapshot tests) and will need their expectations updated, as was done after the D1 sign-off.
+
+**Status:** all 100 facts reviewed and signed off by Aradhya Chandra on 2026-10-10.

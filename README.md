@@ -98,8 +98,8 @@ metrics from the income statement, balance sheet, cash flow statement and share 
 with the PDF page and printed page. All were read from the annual reports by an AI assistant and
 are loaded with `entry_method = llm_extracted`. The 54 read from the FY26 annual report (FY26 and
 its FY25 comparatives) were verified by the author on 2026-10-07 and 2026-10-08. The 100 added in
-D3 from the FY25 and FY24 annual reports (FY25, FY24 and FY23) are **not yet verified by a human**
-(the loader prints the count). When two reports print the same figure, the report for that year is
+D3 from the FY25 and FY24 annual reports (FY25, FY24 and FY23) were verified by the author on
+2026-10-10. When two reports print the same figure, the report for that year is
 the primary source and the other is a cross-check; every pair agreed. FY23 comes only from the FY24
 report's comparatives. The fuller dataset the plan calls for (FY21 onwards, quarters, hand-keyed
 and double-checked) does not exist yet.
@@ -249,10 +249,10 @@ This project was built with an AI coding assistant, milestone by milestone, from
   by the author as the working file on 2026-10-04. They **have not been reviewed by a finance
   partner**. DCF eval gold is the engine's own output on those assumptions, so it is a regression
   check, not independent truth.
-- **Facts** (54 in `data/manual/financials_tcs.csv`) were read from the annual report by an AI
-  assistant; the author verified all of them against the report pages (the original 12 on
-  2026-10-07, the 42 added in D1 on 2026-10-08; `verified_by` and `verified_on` in the CSV). No
-  finance reviewer has checked them.
+- **Facts** (154 in `data/manual/financials_tcs.csv`, FY23-FY26 from three annual reports) were
+  read by an AI assistant; the author verified all of them against the report pages (12 on
+  2026-10-07, 42 on 2026-10-08, 100 on 2026-10-10; `verified_by` and `verified_on` in the CSV).
+  No finance reviewer has checked them.
 - **Runtime model:** `qwen2.5:3b` running locally through Ollama (chosen in a small test on an 8 GB
   MacBook Air; NOTES.md, P0.6). TO VERIFY: its licence. As far as known, the 3B size is under the
   "Qwen Research License" rather than Apache 2.0; fine for local personal use, to be checked before
@@ -395,7 +395,7 @@ scripts/clean_clone_check.sh --worktree
 README.md  PROJECT_PLAN.md  PROGRESS.md  NOTES.md  CLAUDE.md / AGENTS.md (instructions for coding tools)
 config/            company, metrics, ratios, DCF, ingest, agent, eval and UI settings (no code)
 data/
-  manual/          financials_tcs.csv (154 facts FY23-FY26, AI-read; 54 verified by the author), dcf_inputs.yaml
+  manual/          financials_tcs.csv (154 facts FY23-FY26, AI-read; all verified by the author), dcf_inputs.yaml
   sample/          facts_sample.csv (the original 12 facts, verified by the author)
   raw/             private data repo checkout with the PDFs (gitignored)
   db/, chroma/     local SQLite database and vector index (gitignored, rebuilt by commands above)

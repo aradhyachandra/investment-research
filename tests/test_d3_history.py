@@ -237,7 +237,7 @@ def test_new_rows_are_claude_entries_not_yet_verified_with_both_pages(ctx, doc):
     labels = parse_page_labels(ctx.sources[doc]["page_labels"])
     for r in rows:
         assert r["entered_by"] == "Claude", r
-        assert r["verified_by"] == "" and r["verified_on"] == "", r
+        assert r["verified_by"] == "Aradhya Chandra" and r["verified_on"] == "2026-10-10", r   # D3 sign-off
         assert r["ticker"] == "TCS" and r["basis"] == "consolidated"
         page = int(r["source_page"])
         assert r["source_page_label"] == labels[page][0], r
@@ -279,7 +279,7 @@ def test_whole_csv_loads_with_all_checks(conn, ctx):
     ids = load_rows(conn, all_rows(), ctx, entry_method="llm_extracted")
     assert len(ids) == 54 + 4 * len(PRINTED)
     unverified = conn.execute("SELECT COUNT(*) FROM fact WHERE verified_by IS NULL").fetchone()[0]
-    assert unverified == 4 * len(PRINTED)
+    assert unverified == 0                                  # all signed off (D3 on 2026-10-10)
 
 
 def test_whole_csv_loads_with_the_real_pdf_hashes_if_present():
@@ -340,7 +340,7 @@ def test_fy25_primary_source_is_now_the_fy25_report_cross_checked_by_fy26(full):
     f = get_financial_fact(full, "TCS", "revenue_from_operations", "FY25")
     assert f.value == 255324 and f.primary_source is True
     assert f.source_file == f"data/raw/{AR25}" and (f.source_page, f.source_page_label) == (181, "179")
-    assert not f.verified                                   # the FY25 report rows wait for sign-off
+    assert f.verified                                       # signed off 2026-10-10
     [x] = f.cross_checked_by
     assert x.source_file == f"data/raw/{AR26}" and x.source_page == 167 and x.value == 255324 and x.verified
 
@@ -415,7 +415,7 @@ def test_fy23_share_count_before_the_buyback(full):
 def test_ratio_history_matches_hand_calculation(full, ratio_id, period, expected):
     r = compute_ratio(full, "TCS", ratio_id, period)
     assert r.value == pytest.approx(expected, rel=REL)
-    assert r.verified is False          # inputs from the FY25/FY24 reports are not signed off yet
+    assert r.verified is True           # every input is signed off
 
 
 def test_every_ratio_computes_for_fy24_to_fy26(full):
@@ -452,7 +452,7 @@ def test_revenue_cagr_3y_matches_hand_calculation(full):
     assert [(i.role, i.fact.period_label, i.fact.value) for i in r.inputs] == [
         ("current", "FY26", 267021), ("base (3 years earlier)", "FY23", 225458)]
     assert r.formula == ("((revenue_from_operations[FY26] / revenue_from_operations[FY23]) ^ (1 / 3) - 1) * 100")
-    assert r.verified is False                     # FY23 comes from the unverified FY24 report rows
+    assert r.verified is True                      # FY23 rows signed off 2026-10-10 (single source)
 
 
 def test_revenue_cagr_needs_the_base_year(full):
@@ -549,7 +549,7 @@ def test_snapshot_trend_values_come_from_the_tools(full):
         ("FY25", "INR 255,324 crore"), ("FY26", "INR 267,021 crore")]
     assert [p.value for p in rev.trend] == [225458, 240893, 255324, 267021]
     # FY23-FY25 now come from the FY24/FY25 reports (not signed off yet); FY26 is signed off.
-    assert [p.verified for p in rev.trend] == [False, False, False, True]
+    assert [p.verified for p in rev.trend] == [True, True, True, True]     # all signed off
     assert [p.display for p in margin.trend] == ["18.69%", "19.06%", "19.02%", "18.43%"]
     assert all(p.error is None for p in rev.trend + margin.trend)
 
@@ -601,4 +601,4 @@ def test_page_snapshot_tab_shows_the_trend(full, tmp_path):
     snap = at.tabs[1]
     text = "\n".join(c.value for c in snap.caption)
     assert "FY23: INR 225,458 crore" in text and "FY26: INR 267,021 crore" in text
-    assert "not yet checked by a human: FY23, FY24, FY25" in text
+    assert "not yet checked by a human" not in text                       # all years signed off
