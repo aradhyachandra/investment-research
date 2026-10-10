@@ -211,6 +211,14 @@ def _to_call(item: dict) -> ToolCall:
                                           if k in fields and k in CALL_FIELDS and v is not None})
 
 
+def _year_named_turns_off_latest(calls: list[ToolCall], question: str) -> None:
+    """R1, decided by code: search prefers the latest report (SearchArgs default) unless the question
+    or the search phrase names a year; then the search ranks all reports as before."""
+    for c in calls:
+        if c.tool == "search_documents" and (periods_in(question) or periods_in(c.args.get("query") or "")):
+            c.args["prefer_latest"] = False
+
+
 # Tools whose period must have data in the database (explain_period needs none).
 _DATA_TOOLS = ("get_financial_fact", "compute_ratio")
 # Refusals that contradict a not_listed call: that call asks for a reported figure, which is never
@@ -273,6 +281,7 @@ def route(question: str, catalog: Catalog, llm_fn, *, max_calls: int) -> RoutePl
             items[i] = {"tool": "search_documents", "query": c.get("query") or question}
             problems.append(f"router chose metric_id {NOT_LISTED}; the filings are searched instead")
     calls = [_to_call(c) for c in items]
+    _year_named_turns_off_latest(calls, question)
     if not calls:
         return RoutePlan(**failed, problems=["router chose no tools and gave no refusal reason"])
     with_data = [p for p in dict.fromkeys(periods_in(question)) if p in catalog.periods]

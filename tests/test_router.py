@@ -10,7 +10,7 @@ import pytest
 from erp.agent.llm import load_agent_config
 from erp.agent.route_score import RoutingTally, score_route
 from erp.agent.router import RoutePlan, build_catalog, route, route_schema, router_messages
-from erp.agent.tools import TOOL_NAMES, ToolCall
+from erp.agent.tools import TOOL_NAMES, SearchArgs, ToolCall
 from fakes import ScriptedLLM
 from test_dcf_run import TOY_YAML
 
@@ -195,3 +195,49 @@ def test_examples_only_use_ids_the_company_has(catalog):
 def test_dcf_example_only_when_a_scenario_exists(catalog):
     assert '"tool": "run_dcf"' in router_messages("q", catalog)[0]["content"]
     assert '"tool": "run_dcf"' not in router_messages("q", catalog.model_copy(update={"scenarios": []}))[0]["content"]
+
+
+# ---------- R1: prefer the latest report unless the question names a year (decided by code) ----------
+
+SEARCH_REPLY = {"question_type": "qualitative", "refusal_reason": "none",
+                "calls": [{"tool": "search_documents", "query": "employee attrition"}]}
+
+
+def route_q(catalog, question, reply=SEARCH_REPLY):
+    return route(question, catalog, ScriptedLLM(lambda m, s: json.dumps(reply)), max_calls=4)
+
+
+def test_search_without_a_year_prefers_the_latest_report(catalog):
+    plan = route_q(catalog, "How does TCS retain talent?")
+    assert plan.calls == [ToolCall(tool="search_documents", args={"query": "employee attrition"})]
+    assert SearchArgs(**plan.calls[0].args).prefer_latest is True
+
+
+@pytest.mark.parametrize("question", ["What did TCS say about attrition in FY24?",
+                                      "How did TCS describe attrition in fiscal 2024?",
+                                      "What was attrition in 2023-24?"])
+def test_question_naming_a_year_turns_the_preference_off(catalog, question):
+    plan = route_q(catalog, question)
+    assert plan.calls == [ToolCall(tool="search_documents",
+                                   args={"query": "employee attrition", "prefer_latest": False})]
+
+
+def test_year_in_the_search_phrase_also_turns_it_off(catalog):
+    reply = {**SEARCH_REPLY, "calls": [{"tool": "search_documents", "query": "attrition FY24"}]}
+    plan = route_q(catalog, "How has attrition moved?", reply)
+    assert plan.calls[0].args == {"query": "attrition FY24", "prefer_latest": False}
+
+
+def test_the_model_cannot_set_the_preference(catalog):
+    reply = {**SEARCH_REPLY, "calls": [{"tool": "search_documents", "query": "attrition", "prefer_latest": False}]}
+    assert route_q(catalog, "How does TCS retain talent?", reply).calls[0].args == {"query": "attrition"}
+
+
+def test_preference_only_touches_search_calls(catalog):
+    reply = {"question_type": "mixed", "refusal_reason": "none", "calls": [
+        {"tool": "get_financial_fact", "metric_id": "revenue_from_operations", "period": "FY26",
+         "basis": "consolidated"},
+        {"tool": "search_documents", "query": "revenue drivers"}]}
+    plan = route_q(catalog, "What was revenue in FY26 and what drove it?", reply)
+    assert plan.calls[0].args == {"metric_id": "revenue_from_operations", "period": "FY26", "basis": "consolidated"}
+    assert plan.calls[1].args == {"query": "revenue drivers", "prefer_latest": False}

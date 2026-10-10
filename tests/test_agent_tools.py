@@ -184,3 +184,17 @@ def test_search_result_has_chunk_evidence_and_passages(env):
 
 def test_empty_search_query_is_refused(env):
     assert not call(env, "search_documents", query="").ok
+
+
+@pytest.mark.parametrize("args,expected", [({}, True), ({"prefer_latest": False}, False)])
+def test_search_tool_prefers_latest_report_unless_told_not_to(env, monkeypatch, args, expected):
+    # R1: the router turns the preference off when the question names a year; default is on.
+    seen = {}
+
+    def spy(query, **kw):
+        seen.update(kw)
+        return []
+
+    monkeypatch.setattr("erp.agent.tools.search_documents", spy)
+    call(env, "search_documents", query="attrition", **args)
+    assert seen["prefer_latest"] is expected

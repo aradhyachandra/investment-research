@@ -2,6 +2,38 @@
 
 Open questions, TO VERIFY items, and validation TODOs. Newest first.
 
+## R1 prefer the latest report in search (2026-10-10)
+
+- **Recency weight** (`config/ingest.yaml` `retrieval.recency.factor_per_year: 0.95`, TO VERIFY):
+  when the question names no year, a chunk's score x 0.95 per fiscal year behind the latest document
+  of its doc_type in the index. Picked once on reasoning (near-copies differ by ~0-4% in score), not
+  tuned on probes. Tried for information only: 0.90 -> 52/60 top-5 from FY26, 0.95 -> 47/60,
+  0.98 -> 41/60; recall@5 9/12 and recall@10 11/12 at all three.
+- **Probes (PROVISIONAL)**: recall@5 9 -> 9, recall@10 11 -> 11, top-5 from FY26 28 -> 47 of 60.
+  PROV-01 4 -> 1, PROV-02 2 -> 1, PROV-04 2 -> 1; PROV-09/PROV-11 name "FY 2026" so get no weight
+  (PROV-11 stays at 8, was 7 before D3). Near-duplicate collapse (brief step 2) not built.
+- **Plan/brief vs reality: the router never passes `fiscal_year`.** `CALL_FIELDS` has no year field
+  for searches, so "when the question names a year, filter to that year" was never true. R1 keeps
+  year questions exactly as before (no weight, no filter). Four new PROVISIONAL year phrasings
+  (`tests/provisional_year_probes.jsonl`): top-5 from the named year's report as the agent runs it /
+  with the weight forced / with a fiscal_year filter: Y01 FY24 3/0/5, Y02 FY25 1/0/5, Y03 FY24
+  2/0/5, Y04 FY25 0/1/5. Older reports are found only partly today; a code-set year filter would fix
+  it. Not done: author's decision (new behaviour, and a year with no indexed report would return
+  nothing).
+- **Who decides**: the router, in code (`_year_named_turns_off_latest`): `prefer_latest=False` on a
+  search call when `periods_in` finds a period in the question or the search phrase. The LLM cannot
+  set it (not in `CALL_FIELDS`). `SearchArgs.prefer_latest` defaults to True; `search_documents`
+  defaults to False, so direct callers (naive-RAG baseline, probe runner without the flag) are
+  unchanged.
+- Year phrasings `periods_in` does not catch: "the 2024 annual report", "last year", "two years
+  ago". These get the latest-report preference. TO VERIFY whether that matters on real questions.
+- "Latest" is per doc_type over the whole index (one metadata read of the collection per search
+  with the preference on; ~3,000 chunks, not cached).
+- **Eval effects (eval not run):** qualitative/mixed questions without a year now cite FY26 pages
+  more often (gold cites FY26, so citation scores may rise); questions naming a year unchanged; the
+  naive-RAG baseline is unchanged, so agent vs baseline now also differ in ranking. The route plan's
+  search args show `prefer_latest: false` on year questions (route scoring ignores search args).
+
 ## D4 assumptions vs history (2026-10-10)
 
 - TO VERIFY (author): 24 new rows (`docs/D4_facts_for_review.md`): interest on lease liabilities,

@@ -63,6 +63,8 @@ class SearchArgs(BaseModel):
     query: str = Field(min_length=1)
     doc_type: str | None = None
     fiscal_year: int | None = None
+    # R1: set by code (the router turns it off when the question names a year), never by the LLM.
+    prefer_latest: bool = True
 
 
 class PeriodArgs(BaseModel):
@@ -313,7 +315,7 @@ def _dcf_tool(a: DCFArgs, env: ToolEnv) -> ToolResult:
 
 def _search_tool(a: SearchArgs, env: ToolEnv) -> ToolResult:
     hits = search_documents(a.query, top_k=env.search_top_k, doc_type=a.doc_type, fiscal_year=a.fiscal_year,
-                            collection=env.collection, embed_fn=env.embed_fn)
+                            prefer_latest=a.prefer_latest, collection=env.collection, embed_fn=env.embed_fn)
     periods = dict(env.conn.execute("SELECT source_id, period_covered FROM source_document").fetchall())
     evidence, passages = [], []
     for h in hits:

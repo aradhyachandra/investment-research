@@ -52,3 +52,15 @@ tables:
   # search_documents multiplies a table-heavy chunk's score by this before ranking.
   # TO VERIFY: arbitrary first value; tune on the eval set.
   score_weight: 0.85
+
+retrieval:
+  # R1: the FY24, FY25 and FY26 annual reports repeat much of the same text, so older copies
+  # crowded the latest report out of the top results. When the question names no year (and no
+  # year or document filter is set), search_documents multiplies a chunk's score by
+  #   factor_per_year ** (latest fiscal_year of that doc_type in the index - chunk's fiscal_year)
+  # so the latest annual report keeps x1.0, last year's x0.95, the year before x0.9025.
+  # A question that names a year gets no weight (the router decides, from the question text).
+  # TO VERIFY: 0.95 picked once on reasoning, not tuned on the probes: an older passage must
+  # be about 5% more similar per year to outrank the latest one (near-copies differ by ~0-4%).
+  recency:
+    factor_per_year: 0.95

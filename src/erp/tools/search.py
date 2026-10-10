@@ -6,6 +6,11 @@ stored metadata, so a citation is structural rather than generated text.
 Scoring: score = 1 - cosine distance (higher is closer). A table-heavy chunk's score is
 multiplied by tables.score_weight from config/ingest.yaml, so prose ranks above tables
 for the same match: chunk text is for qualitative questions; numbers come from SQLite.
+
+R1, prefer_latest=True (the agent's default when the question names no year): a chunk's score is
+also multiplied by retrieval.recency.factor_per_year for each fiscal year it is behind the latest
+document of its doc_type in the index, so near-copies in older annual reports do not crowd out the
+latest one. Off when a fiscal_year or source_id filter picks the documents.
 """
 import warnings
 
@@ -34,7 +39,8 @@ class SearchResult(BaseModel):
     section: str
     chunk_id: str
     is_table_heavy: bool
-    score: float               # after the table-heavy weight; higher is better
+    score: float               # after the table-heavy and recency weights; higher is better
+    recency_weight: float = 1.0  # 1.0 = latest document of its type, or no preference asked for
 
 
 def _where(doc_type, fiscal_year, source_id):
@@ -50,10 +56,30 @@ def _where(doc_type, fiscal_year, source_id):
     return clauses[0] if len(clauses) == 1 else {"$and": clauses}
 
 
+def _recency_factor(cfg) -> float:
+    f = cfg.get("retrieval", {}).get("recency", {}).get("factor_per_year")
+    if isinstance(f, bool) or not isinstance(f, (int, float)) or not 0 < f <= 1:
+        raise SearchError(f"retrieval.recency.factor_per_year in config/ingest.yaml must be a number "
+                          f"above 0 and at most 1, got {f!r}")
+    return float(f)
+
+
+def _latest_year_by_doc_type(collection) -> dict[str, int]:
+    """Latest fiscal_year per doc_type over the whole index (not only this query's candidates)."""
+    latest = {}
+    for m in collection.get(include=["metadatas"])["metadatas"]:
+        dt, fy = m.get("doc_type"), m.get("fiscal_year")
+        if isinstance(fy, int):
+            latest[dt] = max(latest.get(dt, fy), fy)
+    return latest
+
+
 def search_documents(query: str, top_k: int = 5, doc_type: str | None = None,
                      fiscal_year: int | None = None, source_id: int | None = None,
-                     *, collection=None, embed_fn=embed_texts) -> list[SearchResult]:
-    """Top-k chunks for a question, best first. Filters are exact matches on metadata."""
+                     *, prefer_latest: bool = False, collection=None, embed_fn=embed_texts) -> list[SearchResult]:
+    """Top-k chunks for a question, best first. Filters are exact matches on metadata.
+    prefer_latest: down-weight older documents of the same type (ignored when fiscal_year or
+    source_id is given)."""
     cfg = load_ingest_config()
     if not isinstance(query, str) or not query.strip():
         raise SearchError("query is empty")
@@ -73,6 +99,10 @@ def search_documents(query: str, top_k: int = 5, doc_type: str | None = None,
                              include=["documents", "metadatas", "distances"])
 
     weight = cfg["tables"]["score_weight"]
+    use_recency = prefer_latest and fiscal_year is None and source_id is None
+    if use_recency:
+        per_year = _recency_factor(cfg)
+        latest = _latest_year_by_doc_type(collection)
     results = []
     for chunk_id, text, meta, distance in zip(found["ids"][0], found["documents"][0],
                                               found["metadatas"][0], found["distances"][0]):
@@ -83,11 +113,16 @@ def search_documents(query: str, top_k: int = 5, doc_type: str | None = None,
         score = 1.0 - distance
         if meta.get("is_table_heavy"):
             score *= weight
+        recency = 1.0
+        if use_recency:
+            behind = max(0, latest.get(meta["doc_type"], meta["fiscal_year"]) - meta["fiscal_year"])
+            recency = per_year ** behind
+            score *= recency
         results.append(SearchResult(
             text=text, source_id=meta["source_id"], doc_type=meta["doc_type"], doc_title=meta["doc_title"],
             fiscal_year=meta["fiscal_year"], page=page, page_end=meta.get("page_end", page),
             page_label=meta.get("page_label", ""), section=meta.get("section", ""), chunk_id=chunk_id,
-            is_table_heavy=bool(meta.get("is_table_heavy")), score=score,
+            is_table_heavy=bool(meta.get("is_table_heavy")), score=score, recency_weight=recency,
         ))
     results.sort(key=lambda r: r.score, reverse=True)
     return results[:top_k]

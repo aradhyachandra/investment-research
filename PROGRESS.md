@@ -1,5 +1,48 @@
 # PROGRESS
 
+## 2026-10-10 — R1: prefer the latest annual report in search
+
+**Done** (tests first: 15 new in `tests/test_search.py`, 7 in `tests/test_router.py`, 2 in
+`tests/test_agent_tools.py`, written before the code)
+- `config/ingest.yaml` `retrieval.recency.factor_per_year: 0.95` (TO VERIFY).
+- `src/erp/tools/search.py`: `prefer_latest` keyword (default off). On, and no fiscal_year /
+  source_id filter: score x factor ** (years behind the latest document of the same doc_type in the
+  index). `SearchResult.recency_weight` shows the weight. Bad factor in config -> SearchError.
+- `src/erp/agent/tools.py`: `SearchArgs.prefer_latest = True`, passed to search.
+- `src/erp/agent/router.py`: `_year_named_turns_off_latest` sets `prefer_latest: False` on search
+  calls when the question or search phrase names a year (`periods_in`). Code decides, not the LLM.
+- `tests/run_provisional_probes.py --prefer-latest` (agent rule; prints the latest-report share and
+  runs the 4 new PROVISIONAL year phrasings in `tests/provisional_year_probes.jsonl`).
+- Updated one pinned test (`test_dev_failure_fixes`: the rent question names FY26, so its search
+  call now carries `prefer_latest: False`).
+- Docs: `docs/R1_prefer_latest_report.md`, NOTES.md (R1). No re-index.
+
+**Result (12 PROVISIONAL probes)**: recall@5 9 -> 9, recall@10 11 -> 11, top-5 from the latest
+report 28 -> 47 of 60. PROV-01 4 -> 1, PROV-02 2 -> 1, PROV-04 2 -> 1. Fix 2 (near-duplicate
+collapse) not needed, not built. Eval not run.
+
+**Decisions**
+- One factor (0.95), chosen before measuring; 0.90 / 0.98 run for information only.
+- Year questions behave exactly as before (no weight). "Latest" is per doc_type, over the whole index.
+- `search_documents` defaults to off so the naive-RAG baseline and other direct callers are unchanged.
+
+**Known issues / flags for the author**
+- The router never passes a year filter to search (the brief assumed it did). Year questions find
+  the named year's report in only 0-3 of the top 5 (filter would give 5 of 5). Not changed.
+- "the 2024 annual report" / "last year" are not read as years, so they get the latest preference.
+
+**What to review**: `docs/R1_prefer_latest_report.md`; the factor and its comment in
+`config/ingest.yaml`; `_year_named_turns_off_latest` in `src/erp/agent/router.py`; the 4 year
+phrasings; whether to add a year filter next.
+
+**Next**: author review; decide on the year filter; commit when told. Nothing committed.
+
+**How to run**
+```
+PYTHONPATH=src:tests .venv/bin/pytest -q tests/test_search.py tests/test_router.py tests/test_agent_tools.py
+PYTHONPATH=src .venv/bin/python tests/run_provisional_probes.py --prefer-latest
+```
+
 ## 2026-10-10 — D4: history checks for the DCF assumptions
 
 **Done** (tests first: `tests/test_d4_history_checks.py`, 29 tests, written before the data, config and code)

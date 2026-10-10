@@ -2,6 +2,7 @@
 import pytest
 
 from erp.ingest.index_chroma import add_chunks, open_collection
+from erp.ingest.pdf_to_chunks import load_ingest_config
 from erp.tools.search import SearchError, SearchResult, search_documents
 from fakes import fake_embed
 
@@ -127,3 +128,96 @@ def test_search_uses_query_purpose(collection):
 
     search_documents("client", collection=collection, embed_fn=spy)
     assert seen == ["query"]
+
+
+# ---------- R1: prefer the latest report when no year is asked for ----------
+# The same passage repeated in the FY24, FY25 and FY26 annual reports (as the real reports do),
+# plus a later fact sheet (fiscal_year 2027) that must not count as "a newer annual report".
+
+SAME = "Cyber attacks risk: security operations centres and cyber insurance."
+REPEATED = [
+    (SAME, meta("ar24-cyber", source_id=4, fiscal_year=2024, page=79)),
+    (SAME, meta("ar25-cyber", source_id=3, fiscal_year=2025, page=93)),
+    (SAME, meta("ar26-cyber", source_id=1, fiscal_year=2026, page=64)),
+    (SAME, meta("fs27-cyber", source_id=5, doc_type="fact_sheet", fiscal_year=2027, page=2)),
+]
+
+
+@pytest.fixture
+def repeated(tmp_path):
+    col = open_collection(tmp_path / "chroma", "test_docs")
+    add_chunks(col, REPEATED, embed_fn=fake_embed)
+    return col
+
+
+def factor():
+    return load_ingest_config()["retrieval"]["recency"]["factor_per_year"]
+
+
+def test_recency_factor_is_configured_between_0_and_1():
+    assert 0 < factor() <= 1
+
+
+def test_default_search_is_unchanged_no_recency_weight(repeated):
+    results = search(repeated, SAME, top_k=4)
+    assert {round(r.score, 9) for r in results} == {1.0}
+    assert all(r.recency_weight == 1.0 for r in results)
+
+
+def test_prefer_latest_ranks_the_latest_annual_report_first(repeated):
+    results = search(repeated, SAME, top_k=4, prefer_latest=True)
+    order = [r.chunk_id for r in results if r.doc_type == "annual_report"]
+    assert order == ["ar26-cyber", "ar25-cyber", "ar24-cyber"]
+
+
+def test_prefer_latest_weight_is_factor_per_year_behind(repeated):
+    by_id = {r.chunk_id: r for r in search(repeated, SAME, top_k=4, prefer_latest=True)}
+    f = factor()
+    assert by_id["ar26-cyber"].recency_weight == 1.0
+    assert by_id["ar25-cyber"].recency_weight == pytest.approx(f)
+    assert by_id["ar24-cyber"].recency_weight == pytest.approx(f * f)
+    assert by_id["ar24-cyber"].score == pytest.approx(f * f)
+
+
+def test_latest_year_is_per_document_type(repeated):
+    # The FY27 fact sheet is the latest fact sheet; it does not make the FY26 annual report "older".
+    by_id = {r.chunk_id: r for r in search(repeated, SAME, top_k=4, prefer_latest=True)}
+    assert by_id["fs27-cyber"].recency_weight == 1.0
+    assert by_id["ar26-cyber"].recency_weight == 1.0
+
+
+def test_doc_type_filter_keeps_the_preference(repeated):
+    results = search(repeated, SAME, prefer_latest=True, doc_type="annual_report", top_k=3)
+    assert [r.chunk_id for r in results] == ["ar26-cyber", "ar25-cyber", "ar24-cyber"]
+
+
+@pytest.mark.parametrize("filters", [{"fiscal_year": 2024}, {"source_id": 4}])
+def test_no_recency_weight_when_a_year_or_document_is_chosen(repeated, filters):
+    results = search(repeated, SAME, prefer_latest=True, **filters)
+    assert [r.chunk_id for r in results] == ["ar24-cyber"]
+    assert results[0].recency_weight == 1.0 and results[0].score == pytest.approx(1.0)
+
+
+def test_recency_and_table_weights_multiply(tmp_path):
+    col = open_collection(tmp_path / "c", "test_docs")
+    add_chunks(col, [(SAME, meta("t25", fiscal_year=2025, table=True)),
+                     (SAME, meta("p26", fiscal_year=2026, page=6))], embed_fn=fake_embed)
+    by_id = {r.chunk_id: r for r in search(col, SAME, prefer_latest=True)}
+    table = load_ingest_config()["tables"]["score_weight"]
+    assert by_id["t25"].score == pytest.approx(table * factor())
+
+
+def test_factor_one_means_no_preference(repeated, monkeypatch):
+    cfg = load_ingest_config()
+    cfg = {**cfg, "retrieval": {"recency": {"factor_per_year": 1.0}}}
+    monkeypatch.setattr("erp.tools.search.load_ingest_config", lambda: cfg)
+    results = search(repeated, SAME, top_k=4, prefer_latest=True)
+    assert all(r.recency_weight == 1.0 for r in results)
+
+
+@pytest.mark.parametrize("bad", [0, -0.5, 1.5, "0.9", None])
+def test_bad_recency_factor_is_refused(repeated, monkeypatch, bad):
+    cfg = {**load_ingest_config(), "retrieval": {"recency": {"factor_per_year": bad}}}
+    monkeypatch.setattr("erp.tools.search.load_ingest_config", lambda: cfg)
+    with pytest.raises(SearchError, match="factor_per_year"):
+        search(repeated, SAME, prefer_latest=True)
